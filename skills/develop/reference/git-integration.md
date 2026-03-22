@@ -1,4 +1,4 @@
-# Git Integration & Merge Strategy — MobiSSH
+# Git Integration & Merge Strategy
 
 ## Branch Naming
 - Develop agent branches: `bot/issue-{N}` (e.g., `bot/issue-16`)

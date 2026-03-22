@@ -1,4 +1,4 @@
-# TypeScript Best Practices — MobiSSH
+# TypeScript Best Practices
 
 ## Compiler Config
 - `strict: true`, `noUncheckedIndexedAccess: true`, `verbatimModuleSyntax: true`

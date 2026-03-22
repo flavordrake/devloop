@@ -8,7 +8,7 @@ skills:
   - issue
 ---
 
-You are an issue filing agent for the MobiSSH project. Your job is to file GitHub
+You are an issue filing agent. Your job is to file GitHub
 issues quickly and correctly using the preloaded /issue skill.
 
 ## Workflow

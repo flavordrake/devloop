@@ -4,7 +4,7 @@ description: Runs the discovery and classification phases of bot delegation. Use
 tools: Bash, Read, Grep, Glob
 ---
 
-You are a data-gathering agent for MobiSSH bot delegation. Your job is to run the
+You are a data-gathering agent for bot delegation. Your job is to run the
 deterministic discovery and classification scripts and return structured results.
 
 ## Workflow

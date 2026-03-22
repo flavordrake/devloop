@@ -41,7 +41,7 @@ The hardest part of this skill is not the analysis -- it's the decision. After m
 
 But the economics are clear: each fix cycle costs roughly the same amount of effort, while the probability of convergence drops and the risk of breaking unrelated functionality rises. The total cost of "one more fix" includes the fix itself, the regression it may cause, and the next fix after that. Stopping early is not admitting failure -- it is recognizing that a different approach will succeed where this one cannot.
 
-## Case Study: Selection Overlay (MobiSSH #55/#108/#111)
+## Case Study: Selection Overlay
 A transparent-text-over-canvas overlay for mobile text selection went through 5 fix cycles. Each fix resolved one bug and introduced another: positioning drift, stale DOM, keyboard/resize cascade, scoping errors. Fixes leaked into resize handlers and focus management. Two separate TDZ errors indicated structural scope problems. The feature was never usable on real hardware despite passing headless tests. After an expert review found 5 P1 issues in code that had been through 4 fix cycles, the feature was flagged off, then branched for a fresh approach.
 
 Every signal listed above was present by fix 3. The rollback should have happened two cycles earlier.

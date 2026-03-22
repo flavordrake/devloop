@@ -8,7 +8,7 @@ description: Use when the user says "release", "tag a release", "cut a release",
 > **Process reference:** `.claude/process.md` defines the label taxonomy, workflow states,
 > and conventions that this skill must follow.
 
-Automated release process for MobiSSH. Handles version bumping across all touchpoints, changelog generation from git history, full validation, and tagging.
+Automated release process. Handles version bumping across all touchpoints, changelog generation from git history, full validation, and tagging.
 
 ## Version Touchpoints
 
@@ -38,7 +38,7 @@ Version bump rules (semver):
 - **Minor** (0.2.0 -> 0.3.0): New features, new test infrastructure, refactors, new skills. No breaking API/protocol changes.
 - **Major** (0.x -> 1.0): Breaking changes to WS protocol, vault format, or deployment model
 
-For MobiSSH's current maturity (pre-1.0), minor bumps are the norm. 85 commits with features = minor.
+For pre-1.0 projects, minor bumps are the norm. Many commits with features = minor.
 
 ## Step 2: Generate Changelog
 
@@ -90,35 +90,28 @@ mkdir -p "$SECURITY_DIR"
 ### Build the context prompt
 
 Before running the tools, assemble a context file with the project documentation so
-the auditors understand what MobiSSH is, its architecture, trust boundaries, and
-security policy. Without this they hallucinate about the attack surface.
+the auditors understand the project's architecture, trust boundaries, and security
+policy. Without this they hallucinate about the attack surface.
 
 ```bash
 CONTEXT_FILE="$SECURITY_DIR/audit-context.md"
 cat > "$CONTEXT_FILE" << 'CONTEXT_EOF'
-# MobiSSH — Security Audit Context
+# Security Audit Context
 CONTEXT_EOF
 
 # Append project docs that define intent, architecture, and security posture
 cat CLAUDE.md >> "$CONTEXT_FILE"
 echo -e "\n---\n" >> "$CONTEXT_FILE"
 cat .claude/rules/security.md >> "$CONTEXT_FILE"
-echo -e "\n---\n" >> "$CONTEXT_FILE"
-cat .claude/rules/server.md >> "$CONTEXT_FILE"
+# Add project-specific architecture docs if they exist
+[ -f .claude/rules/server.md ] && { echo -e "\n---\n" >> "$CONTEXT_FILE"; cat .claude/rules/server.md >> "$CONTEXT_FILE"; }
 ```
 
 ### Prompts
 
-The prompts include the assembled context so the tools understand:
-- MobiSSH is a mobile-first SSH PWA over Tailscale (network-layer auth, no public internet)
-- Single Node.js process: HTTP static + WebSocket SSH bridge on port 8081
-- AES-GCM vault with PasswordCredential (Chrome/Android biometric)
-- Cache-Control: no-store on all responses, SW network-first
-- Container deployment with baked git hash, Tailscale serve for HTTPS
-
-The audit concerns from `security.md`: plaintext credential storage, vault bypass
-paths, cache policy violations, secret leakage, XSS/injection in the WebSocket
-bridge, and SSRF via the SSH proxy.
+The prompts include the assembled context so the tools understand the project's
+architecture, deployment model, trust boundaries, and security policy. The audit
+concerns come from the project's `security.md` rule file.
 
 **Gemini** (headless, non-interactive):
 
@@ -127,26 +120,22 @@ gemini -p "$(cat "$CONTEXT_FILE")
 
 ---
 
-You are a security auditor. The project documentation above describes what MobiSSH
-is, how it's deployed, and its security policy. Use this to understand the real
+You are a security auditor. The project documentation above describes the project,
+how it's deployed, and its security policy. Use this to understand the real
 attack surface — don't guess.
 
-Key trust boundaries:
-- Tailscale mesh provides network-layer auth (no public internet exposure)
-- WebSocket bridge proxies SSH — the bridge itself has no auth beyond Tailscale
-- AES-GCM vault stores credentials client-side with biometric unlock
-- Service worker caches for offline only (network-first, no-store headers)
+Review the trust boundaries described in the documentation and focus on:
 
 Audit for security issues, ranked by severity (critical/high/medium/low):
-1. Credential handling: plaintext storage, vault bypass, key material in localStorage/logs
-2. WebSocket bridge: command injection, SSRF via SSH host/port params, auth bypass
-3. Service worker: cache poisoning, stale credential serving, scope escalation
-4. XSS vectors: user input rendered without sanitization (terminal output, profile names)
-5. Dependencies: known CVEs in server/package.json deps
+1. Credential handling: plaintext storage, vault bypass, key material in logs
+2. Injection vectors: command injection, SSRF, auth bypass in APIs/bridges
+3. Cache/service worker: poisoning, stale credential serving, scope escalation
+4. XSS vectors: user input rendered without sanitization
+5. Dependencies: known CVEs in package.json deps
 6. Docker/deployment: container escape paths, exposed ports, secret leakage in build args
 
 For each finding: severity, file:line, description, recommended fix.
-Skip theoretical issues that don't apply given the Tailscale-only deployment.
+Skip theoretical issues that don't apply given the project's deployment model.
 Output as markdown." > "$SECURITY_DIR/gemini-audit.md" 2>&1
 ```
 
@@ -157,23 +146,16 @@ codex exec "$(cat "$CONTEXT_FILE")
 
 ---
 
-You are a security auditor. The project documentation above describes MobiSSH's
+You are a security auditor. The project documentation above describes the project's
 architecture, deployment model, and security policy. Read it carefully before auditing.
 
-Key facts:
-- Deployed on Tailscale mesh only — not public internet
-- Single Node.js process: static files + WebSocket SSH bridge on port 8081
-- AES-GCM vault with PasswordCredential for credential storage
-- Cache-Control: no-store on all static responses, SW is network-first
-- Docker container with baked git hash, Tailscale serve for HTTPS termination
-
 Review this codebase for:
-1. Plaintext credential storage or vault bypass paths (policy: block feature if vault unavailable)
-2. WebSocket/SSH proxy injection or SSRF (user-supplied host/port forwarded to ssh2)
-3. Cache-Control violations (must be no-store on ALL static responses)
-4. XSS in terminal output, profile names, or user input handling
+1. Plaintext credential storage or vault bypass paths
+2. Injection or SSRF in user-supplied inputs forwarded to backend services
+3. Cache-Control violations relevant to the project's caching strategy
+4. XSS in user input handling and output rendering
 5. Secret leakage in logs, error messages, console output, or git history
-6. Dependency vulnerabilities in server/package.json
+6. Dependency vulnerabilities in package.json
 
 Report findings as: severity | file:line | description | fix.
 Only report findings that are real given the architecture. No theoretical noise.

@@ -145,7 +145,7 @@ emulator or real-device validation is mandatory. Do NOT merge with headless-only
 unless the full Appium run in Step 7 will cover it.
 
 ### Production container awareness
-The user tests on the production Docker container (`mobissh-prod`), not a local server.
+The user may test on a production Docker container, not a local server.
 After all merges complete, rebuild and restart the container:
 ```bash
 scripts/container-ctl.sh restart

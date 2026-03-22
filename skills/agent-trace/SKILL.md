@@ -82,7 +82,7 @@ require code changes or special setup. Capture raw output to `telemetry/`.
 Run Nsight Compute, Nsight Systems, or compute-sanitizer. Save raw output to
 `telemetry/` and bottleneck summary to `logs/`.
 
-#### Web/PWA tasks (MobiSSH)
+#### Web/PWA tasks
 
 | File | What to capture | Tool |
 |------|----------------|------|
@@ -160,7 +160,7 @@ status: partial
 [/TRACE_SNAPSHOT]
 ```
 
-## 5. Integration with MobiSSH SDLC
+## 5. Integration with Project SDLC
 
 ### Where TRACEs live
 

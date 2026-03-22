@@ -1,4 +1,4 @@
-# ESLint Resolution Guide — MobiSSH
+# ESLint Resolution Guide
 
 ## Config Structure
 `.eslintrc.json` has path-scoped overrides:

@@ -43,7 +43,7 @@ Always `isolation: "worktree"`. Always background. Always test-only (no app code
 ## Agent Prompt Template
 
 ```
-You are a test-writing agent for MobiSSH. Your ONLY job is writing tests.
+You are a test-writing agent. Your ONLY job is writing tests.
 Do NOT modify application code. Test-only PR.
 
 CRITICAL: Follow `.claude/agents/develop.md` for branch/commit workflow.

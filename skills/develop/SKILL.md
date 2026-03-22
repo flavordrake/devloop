@@ -55,7 +55,7 @@ For each issue number:
    ```
    If an open PR exists, ask the user: resume (force-push) or skip?
 
-3. Check for prior failure summaries in `.claude/projects/-home-dev-workspace-mobissh/memory/bot-attempts.md`
+3. Check for prior failure summaries in `memory/bot-attempts.md`
 
 4. Read the delegate skill's conventions: files in scope should be identified from the
    issue body. If the issue body lacks scope, read the relevant source files to determine

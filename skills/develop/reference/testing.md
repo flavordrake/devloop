@@ -1,4 +1,4 @@
-# Testing Best Practices — MobiSSH
+# Testing Best Practices
 
 ## Test Pyramid
 ```

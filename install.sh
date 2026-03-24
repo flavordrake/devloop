@@ -2,11 +2,20 @@
 # install.sh — Install devloop into a workspace or project
 #
 # Usage:
-#   ./install.sh /path/to/workspace    # symlink into workspace/.claude/
-#   ./install.sh                        # symlink into current directory/.claude/
+#   ./install.sh /path/to/workspace    # install into workspace/.claude/
+#   ./install.sh                        # install into current directory/.claude/
 #
-# Creates symlinks from target/.claude/{skills,agents,hooks,rules,settings.json}
-# to this devloop checkout. Preserves existing settings.local.json.
+# Strategy:
+#   - Skills, agents, hooks: symlinked as subdirectories inside devloop/
+#     (e.g., .claude/skills/devloop -> devloop/skills). Project keeps its own
+#     skills alongside devloop's — no clobbering.
+#   - Rules: same pattern — .claude/rules/devloop -> devloop/rules
+#   - Settings: merges devloop permissions and hooks into existing settings.json
+#     using jq. Creates settings.json if it doesn't exist.
+#
+# This means a project with existing .claude/skills/my-skill/ keeps it.
+# devloop skills appear as .claude/skills/devloop/cycle/SKILL.md etc.
+# Claude Code discovers skills recursively in .claude/skills/.
 
 set -euo pipefail
 
@@ -17,29 +26,59 @@ CLAUDE_DIR="$TARGET/.claude"
 echo "Installing devloop into $CLAUDE_DIR"
 echo "  Source: $DEVLOOP_DIR"
 
-mkdir -p "$CLAUDE_DIR"
+mkdir -p "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents" "$CLAUDE_DIR/hooks" "$CLAUDE_DIR/rules"
 
-for dir in skills agents hooks rules; do
-  if [ -L "$CLAUDE_DIR/$dir" ]; then
-    echo "  $dir: updating symlink"
-    rm "$CLAUDE_DIR/$dir"
-  elif [ -d "$CLAUDE_DIR/$dir" ]; then
-    echo "  $dir: backing up existing to $dir.bak"
-    mv "$CLAUDE_DIR/$dir" "$CLAUDE_DIR/$dir.bak"
+# Symlink devloop content as a subdirectory — doesn't clobber existing project content
+for dir in skills agents rules; do
+  LINK="$CLAUDE_DIR/$dir/devloop"
+  if [ -L "$LINK" ]; then
+    rm "$LINK"
   fi
-  ln -s "$DEVLOOP_DIR/$dir" "$CLAUDE_DIR/$dir"
-  echo "  $dir: linked"
+  ln -s "$DEVLOOP_DIR/$dir" "$LINK"
+  echo "  $dir/devloop: linked"
 done
 
-# Settings: symlink only if not already present (don't clobber project settings)
-if [ ! -f "$CLAUDE_DIR/settings.json" ] && [ ! -L "$CLAUDE_DIR/settings.json" ]; then
-  ln -s "$DEVLOOP_DIR/settings.json" "$CLAUDE_DIR/settings.json"
-  echo "  settings.json: linked"
+# Hooks: symlink individual files (hooks aren't discovered recursively)
+for hook in "$DEVLOOP_DIR"/hooks/*.sh; do
+  name=$(basename "$hook")
+  LINK="$CLAUDE_DIR/hooks/$name"
+  if [ -L "$LINK" ]; then
+    rm "$LINK"
+  elif [ -f "$LINK" ]; then
+    echo "  hooks/$name: skipped (project has its own)"
+    continue
+  fi
+  ln -s "$hook" "$LINK"
+  echo "  hooks/$name: linked"
+done
+
+# Settings: merge devloop permissions and hooks into existing settings.json
+SETTINGS="$CLAUDE_DIR/settings.json"
+DEVLOOP_SETTINGS="$DEVLOOP_DIR/settings.json"
+
+if [ ! -f "$SETTINGS" ]; then
+  # No existing settings — copy devloop's as starting point
+  cp "$DEVLOOP_SETTINGS" "$SETTINGS"
+  echo "  settings.json: created from devloop"
+elif command -v jq >/dev/null 2>&1; then
+  # Merge: add devloop permissions to existing allow list, add hooks
+  MERGED=$(jq -s '
+    .[0] as $existing | .[1] as $devloop |
+    ($existing.permissions.allow // []) + ($devloop.permissions.allow // []) | unique as $merged_allow |
+    $existing * {
+      permissions: ($existing.permissions // {} | . + { allow: $merged_allow }),
+      hooks: (($existing.hooks // {}) * ($devloop.hooks // {}))
+    }
+  ' "$SETTINGS" "$DEVLOOP_SETTINGS")
+  echo "$MERGED" > "$SETTINGS"
+  echo "  settings.json: merged (permissions + hooks)"
 else
-  echo "  settings.json: skipped (already exists)"
+  echo "  settings.json: jq not found, skipped merge (install jq for auto-merge)"
 fi
 
-echo "Done. Devloop installed."
 echo ""
-echo "Project-specific overrides go in $CLAUDE_DIR/ (merged by Claude Code)."
-echo "To update: git pull in $DEVLOOP_DIR"
+echo "Done. Devloop installed."
+echo "  Project skills:  $CLAUDE_DIR/skills/  (your skills alongside devloop/)"
+echo "  Project rules:   $CLAUDE_DIR/rules/   (your rules alongside devloop/)"
+echo "  Project agents:  $CLAUDE_DIR/agents/  (your agents alongside devloop/)"
+echo "  To update: git pull in $DEVLOOP_DIR, symlinks follow automatically"

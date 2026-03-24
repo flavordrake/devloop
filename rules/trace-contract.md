@@ -68,3 +68,16 @@ Every skill that spawns agents should:
 4. Harvest on completion
 
 Skills: `/spec-develop`, `/cycle`, `/develop`, `/write-tests`, `/delegate`, `/integrate`
+
+## Behavioral change checklist
+
+When a TRACE documents a change that affects initial app state (cold start, default
+panel, initial DOM, routing), it must include a **downstream impact** section:
+
+1. **Which test harnesses assume the old state?** List by name and file.
+2. **CI vs non-CI:** CI tests (headless Playwright) catch regressions on every PR.
+   Non-CI tests (Appium/emulator, device tests) run infrequently — breakage is silent.
+3. **Fixture updates needed?** If yes, file an issue immediately — don't wait for
+   someone to manually discover the failure days later.
+
+This checklist should also be part of the develop agent's self-review step.

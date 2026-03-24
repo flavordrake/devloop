@@ -1,0 +1,22 @@
+{
+  "name": "flavordrake",
+  "owner": {
+    "name": "flavordrake"
+  },
+  "metadata": {
+    "description": "SDLC automation plugins for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "devloop",
+      "source": {
+        "source": "github",
+        "repo": "flavordrake/devloop"
+      },
+      "description": "TDD-driven SDLC toolchain — cycle, develop, integrate, delegate, trace, and more",
+      "version": "0.2.0",
+      "keywords": ["sdlc", "tdd", "agents", "development", "automation", "cycle"],
+      "license": "Apache-2.0"
+    }
+  ]
+}

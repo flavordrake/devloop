@@ -4,19 +4,23 @@ TDD-driven SDLC toolchain for Claude Code. Skills, agents, hooks, and rules for 
 
 ## Install
 
-**From marketplace:**
+**Add the marketplace, then install:**
 ```
 /plugin marketplace add flavordrake/devloop
 /plugin install devloop@flavordrake
 ```
 
-**Local development:**
+**Or load locally for development:**
 ```bash
 git clone https://github.com/flavordrake/devloop.git
 claude --plugin-dir ./devloop
 ```
 
 Skills are namespaced: `/devloop:cycle`, `/devloop:develop`, etc.
+
+## Marketplace
+
+This repo is both a plugin and a marketplace. The marketplace catalog at `.claude-plugin/marketplace.json` lists all available plugins. Third-party authors can submit plugins by PR — add an entry to the `plugins` array with a `source` pointing to your GitHub repo.
 
 ## Skills
 

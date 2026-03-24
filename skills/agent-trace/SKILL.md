@@ -203,6 +203,27 @@ It does NOT block execution. Writes to `.traces/` itself are excluded to avoid l
 decision worth capturing. Memory updates, rule changes, and permission changes are
 reliable proxies for "something significant just happened."
 
+The hook now includes freshness checks: reports whether the TRACE is boilerplate
+(never populated), stale (>1hr since update), and how many commits have happened
+since the last update.
+
+### scripts/trace-check.sh
+
+Run manually or as part of a checkpoint to get a full TRACE health report:
+
+```bash
+scripts/trace-check.sh              # auto-detect from CLAUDE.md
+scripts/trace-check.sh .traces/trace-foo-123/  # specific trace
+```
+
+Reports:
+- TRACE last modified time and staleness warning
+- Commits since last update
+- Recently modified source files
+- TRACE section completeness (boilerplate detection)
+- Pivot count
+- Memory updates not yet harvested into TRACE
+
 ### Harvesting: TRACE → Memory
 
 After a TRACE is complete, the orchestrator (main session) extracts:

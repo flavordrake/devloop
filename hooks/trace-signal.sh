@@ -1,5 +1,5 @@
 #!/bin/bash
-# PostToolUse hook: detect writes to decision-signal paths and nudge TRACE update.
+# PostToolUse hook: detect writes to decision-signal paths and check TRACE freshness.
 # Fires on Write and Edit. Does NOT block — returns additionalContext only.
 #
 # Decision-signal paths:
@@ -34,15 +34,32 @@ esac
 
 # Find active TRACE from CLAUDE.md if possible
 TRACE_DIR=""
+TRACE_STATUS=""
 if [ -f "CLAUDE.md" ]; then
   TRACE_DIR=$(grep -oP '\.traces/trace-[^\s`/]+/' CLAUDE.md 2>/dev/null | head -1)
 fi
 
-CONTEXT="TRACE signal (${SIGNAL}): A decision was just captured in ${FILE_PATH##*/}."
-if [ -n "$TRACE_DIR" ]; then
-  CONTEXT="${CONTEXT} Active TRACE: ${TRACE_DIR} — consider updating TRACE.md or adding a pivot if strategy changed."
+if [ -n "$TRACE_DIR" ] && [ -f "$TRACE_DIR/TRACE.md" ]; then
+  # Check freshness
+  TRACE_MTIME=$(stat -c %Y "$TRACE_DIR/TRACE.md" 2>/dev/null || echo 0)
+  TRACE_AGE=$(( $(date +%s) - TRACE_MTIME ))
+  TRACE_AGE_MIN=$(( TRACE_AGE / 60 ))
+
+  # Check if still boilerplate
+  if grep -q "<!-- Post-mortem" "$TRACE_DIR/TRACE.md" 2>/dev/null; then
+    TRACE_STATUS="BOILERPLATE (never populated)"
+  elif [ $TRACE_AGE_MIN -gt 60 ]; then
+    TRACE_STATUS="STALE (${TRACE_AGE_MIN}m since last update)"
+  else
+    TRACE_STATUS="current (${TRACE_AGE_MIN}m ago)"
+  fi
+
+  # Count commits since update
+  COMMIT_COUNT=$(git log --oneline --after="$(date -d @$TRACE_MTIME --iso-8601=seconds 2>/dev/null || echo '1 hour ago')" 2>/dev/null | wc -l || echo "?")
+
+  CONTEXT="TRACE signal (${SIGNAL}): ${FILE_PATH##*/}. Active TRACE: ${TRACE_DIR} — ${TRACE_STATUS}, ${COMMIT_COUNT} commits since. Run scripts/trace-check.sh for details."
 else
-  CONTEXT="${CONTEXT} No active TRACE found in CLAUDE.md. Consider initializing one with scripts/trace-init.sh if this is part of a development arc."
+  CONTEXT="TRACE signal (${SIGNAL}): ${FILE_PATH##*/}. No active TRACE found. Init with scripts/trace-init.sh if this is part of a development arc."
 fi
 
 jq -n --arg ctx "$CONTEXT" '{

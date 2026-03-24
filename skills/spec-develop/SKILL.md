@@ -122,6 +122,27 @@ The orchestrator does NOT develop code — it manages the pipeline, checks quali
 and provides feedback between phases. If an agent fails, the orchestrator diagnoses
 and re-runs with corrections (max 2 retries per phase).
 
+## TRACE integration
+
+Initialize a TRACE at the start of the pipeline:
+```bash
+scripts/trace-init.sh "spec-develop-{N}"
+```
+
+Record in `strategy/initial_plan.md`:
+- Issue summary and which phases will run
+- Whether full or lightweight mode
+
+After each phase, update the TRACE:
+- **Phase 0**: save spec to `specs/spec-{N}.md` in the trace dir
+- **Phase 1**: record test count, which assertions map to which tests
+- **Phase 2**: record cycles used, lines changed, any test updates
+
+On completion, populate `TRACE.md` with:
+- **The "Why"**: what the spec clarified that the issue didn't
+- **The "Ambiguity Gap"**: what was assumed vs stated
+- **The "Knowledge Seed"**: heuristic for future spec-develop runs
+
 ## Integration with /cycle
 
 The `/cycle` skill should call `/spec-develop N` instead of `/develop N` for issues

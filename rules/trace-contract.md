@@ -71,13 +71,17 @@ Skills: `/spec-develop`, `/cycle`, `/develop`, `/write-tests`, `/delegate`, `/in
 
 ## Behavioral change checklist
 
-When a TRACE documents a change that affects initial app state (cold start, default
-panel, initial DOM, routing), it must include a **downstream impact** section:
+When a TRACE documents a change that affects **initial system state** (startup
+behavior, default configuration, entry points, expected preconditions), it must
+include a **downstream impact** section:
 
 1. **Which test harnesses assume the old state?** List by name and file.
-2. **CI vs non-CI:** CI tests (headless Playwright) catch regressions on every PR.
-   Non-CI tests (Appium/emulator, device tests) run infrequently — breakage is silent.
+2. **CI vs non-CI frequency:** Tests that run on every commit catch regressions
+   immediately. Tests that run infrequently (manual, scheduled, device-specific)
+   break silently — failures aren't discovered until someone runs them.
 3. **Fixture updates needed?** If yes, file an issue immediately — don't wait for
    someone to manually discover the failure days later.
 
 This checklist should also be part of the develop agent's self-review step.
+
+See `rules/platform/` for platform-specific examples of this checklist.

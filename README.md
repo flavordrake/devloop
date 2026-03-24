@@ -1,74 +1,88 @@
 # devloop
 
-General-purpose Claude Code development loop toolchain. Skills, agents, hooks, and rules for TDD-driven SDLC automation.
+TDD-driven SDLC toolchain for Claude Code. Skills, agents, hooks, and rules for development automation.
 
 ## Install
 
-```bash
-git clone https://github.com/flavordrake/devloop.git
-./devloop/install.sh /path/to/workspace
-```
-
-Or as a Claude Code plugin:
+**From marketplace:**
 ```
 /plugin marketplace add flavordrake/devloop
-/plugin install devloop
+/plugin install devloop@flavordrake
 ```
 
-Project-specific config goes in `project/.claude/` and merges via Claude Code's upward-traversal.
-
-## Structure
-
+**Local development:**
+```bash
+git clone https://github.com/flavordrake/devloop.git
+claude --plugin-dir ./devloop
 ```
-hooks/                  Shell hooks (PreToolUse, PostToolUse)
-rules/                  Core rules (stack-agnostic)
-  command-hygiene.md      One script per call, no chains, no heredocs
-  workflow.md             Fix process not symptom, inferred constraints
-  security.md             No plaintext secrets, block don't fallback
-  agents.md               Spawning, permissions, worktree safety
-  tdd.md                  Two-phase TDD (write-tests → develop)
-  decomposition.md        Sequential A→B→C for coupled refactors
-  state-management.md     Explicit state machines, server↔client contracts
-  hooks-and-cwd.md        Absolute paths, CWD drift resilience
-  platform/               Stack/platform-specific rules (opt-in)
-    mobile-touch.md         Mobile browser touch constraints
-skills/                 SDLC skills (stack-agnostic)
-agents/                 Agent prompt templates
-settings.json           Shared permissions and hook wiring
-install.sh              Symlink installer for workspaces
-.claude-plugin/         Claude Code plugin manifest
-```
+
+Skills are namespaced: `/devloop:cycle`, `/devloop:develop`, etc.
 
 ## Skills
 
 | Skill | Purpose |
 |-------|---------|
-| `/cycle` | One pump of the SDLC loop — discover, classify, develop, gate |
-| `/develop` | Implement an issue (Phase 2 of TDD) |
-| `/write-tests` | Write tests from spec (Phase 1 of TDD) |
-| `/integrate` | Review, gate, merge bot PRs |
-| `/delegate` | Classify and dispatch issues to bot agents |
-| `/decompose` | Break large issues into bot-sized sub-issues |
-| `/issue` | File a GitHub issue from conversation |
-| `/release` | Version bump, changelog, tag, publish |
-| `/agent-trace` | TRACE protocol for capturing development arcs |
+| `/devloop:cycle` | One pump of the SDLC loop — discover, classify, develop, gate |
+| `/devloop:develop` | Implement an issue (Phase 2 of TDD) |
+| `/devloop:write-tests` | Write tests from spec (Phase 1 of TDD) |
+| `/devloop:integrate` | Review, gate, merge bot PRs |
+| `/devloop:delegate` | Classify and dispatch issues to bot agents |
+| `/devloop:decompose` | Break large issues into bot-sized sub-issues |
+| `/devloop:issue` | File a GitHub issue from conversation |
+| `/devloop:release` | Version bump, changelog, tag, publish |
+| `/devloop:agent-trace` | TRACE protocol for capturing development arcs |
 
-## Core Rules
+## Hooks
+
+Installed automatically with the plugin:
+
+- **enforce-hygiene** (PreToolUse:Bash) — detects compound chains, redirects, heredocs, raw CLI calls
+- **trace-signal** (PostToolUse:Write/Edit) — reminds to update TRACE when decision-signal paths change
+
+## Rules
+
+Core rules (stack-agnostic):
 
 | Rule | Key insight |
 |------|-------------|
 | command-hygiene | One script per Bash call — chains cause false positive failures |
-| tdd | Two agents: test writer (red) then developer (green) — tests define the spec |
-| decomposition | Sequential A→B→C for coupled refactors — each part bot-sized and mergeable |
-| state-management | Don't infer state from boolean combos — use explicit lifecycle enums |
-| hooks-and-cwd | Absolute paths for hooks, CWD drifts when worktrees are deleted |
-| agents | Permissions flow via settings.json allow-list, not agent frontmatter |
+| tdd | Two agents: test writer (red) then developer (green) |
+| decomposition | Sequential A→B→C for coupled refactors |
+| state-management | Explicit lifecycle enums, not boolean combinations |
+| hooks-and-cwd | Absolute paths for hooks, CWD drift resilience |
+| agents | Permissions flow via settings.json allow-list |
+| workflow | Fix the process not the symptom |
+| security | No plaintext secrets, block don't fallback |
+
+Platform-specific (in `rules/platform/`, opt-in):
+- **mobile-touch** — textarea swipe constraints, touch-action patterns
+
+## Project Permissions
+
+The plugin provides hooks and skills but **cannot distribute permissions**. Run the merge script to add recommended permissions to your project:
+
+```bash
+./devloop/scripts/merge-settings.sh /path/to/project/.claude/settings.json
+```
+
+This uses `jq` to merge devloop's recommended permissions into your existing settings — non-destructive, only adds, never removes.
+
+## Structure
+
+```
+.claude-plugin/
+  plugin.json           Plugin manifest
+  hooks.json            Hook wiring (uses ${CLAUDE_PLUGIN_ROOT})
+skills/                 SDLC skills
+agents/                 Agent prompt templates
+hooks/                  Shell hook scripts
+rules/                  Core rules (stack-agnostic)
+  platform/             Platform-specific rules (opt-in)
+```
 
 ## Design Principles
 
 - **Stack-agnostic core**: Rules and skills work for any language/framework
-- **Platform specializations**: `rules/platform/` for mobile, embedded, etc. (opt-in)
-- **Portable**: No project-specific references
-- **Composable**: Projects override/extend via their own `.claude/`
-- **No magic sync**: `git pull` in devloop dir updates all symlinked projects
+- **Platform specializations**: `rules/platform/` for mobile, embedded, etc.
 - **Convention-based**: Skills expect `scripts/test-gate.sh` etc. by convention
+- **Proper plugin**: Uses Claude Code plugin system, not symlinks

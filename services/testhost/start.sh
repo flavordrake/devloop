@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
-# services/testhost/start.sh — Start the testhost file upload server
+# services/testhost/start.sh — Start the testhost review + upload server
+#
+# Usage:
+#   services/testhost/start.sh [PROJECT_ROOT]
 #
 # Environment variables (all optional):
 #   TESTHOST_PORT       — Listen port (default: 9090)
-#   TESTHOST_UPLOAD_DIR — Upload directory (default: services/testhost/uploads)
-#   TESTHOST_MAX_SIZE   — Max upload size in bytes (default: 52428800 = 50MB)
-#   TESTHOST_AUTH_TOKEN — Auth token for non-local deployments (default: none)
+#   TESTHOST_PROJECT    — Project root for test artifacts (default: first arg or cwd)
+#   TESTHOST_UPLOAD_DIR — Upload directory (default: $TESTHOST_PROJECT/test-results/uploads)
 
 set -euo pipefail
 cd "$(dirname "$0")"
+
+if [[ -n "${1:-}" ]]; then
+  export TESTHOST_PROJECT="$1"
+fi
 
 exec node server.js

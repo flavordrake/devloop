@@ -30,31 +30,73 @@ if [ -z "$TRACE_DIR" ] || [ ! -d "$TRACE_DIR" ]; then
 fi
 
 TRACE_MD="$TRACE_DIR/TRACE.md"
-echo "Active TRACE: $TRACE_DIR"
 
-# Last modified
+# Thresholds for forcing a trace update
+STALE_MIN=60        # >60m since last update = stale
+COMMIT_WARN=5       # >5 commits since update = falling behind
+AGENT_WARN=3        # >3 agent runs since update = significant untraced work
+
+# Gather metrics
+TRACE_AGE_MIN=0
+COMMIT_COUNT=0
+AGENT_COUNT=0
+STATUS="unknown"
+
 if [ -f "$TRACE_MD" ]; then
   TRACE_MTIME=$(stat -c %Y "$TRACE_MD" 2>/dev/null || echo 0)
   TRACE_AGE=$(( $(date +%s) - TRACE_MTIME ))
   TRACE_AGE_MIN=$(( TRACE_AGE / 60 ))
-  echo "TRACE.md last updated: ${TRACE_AGE_MIN}m ago"
 
-  if [ $TRACE_AGE_MIN -gt 60 ]; then
-    echo "  WARNING: TRACE is stale (>1 hour). Consider updating."
+  ISO_SINCE=$(date -d "@$TRACE_MTIME" --iso-8601=seconds 2>/dev/null || echo '1 hour ago')
+  COMMIT_COUNT=$(git log --oneline --since="$ISO_SINCE" 2>/dev/null | wc -l)
+
+  AGENT_LOG="$TRACE_DIR/logs/agents.log"
+  if [ -f "$AGENT_LOG" ]; then
+    AGENT_COUNT=$(grep -c "agent-spawn" "$AGENT_LOG" 2>/dev/null || echo 0)
+  fi
+
+  if grep -q "<!-- Post-mortem" "$TRACE_MD" 2>/dev/null; then
+    STATUS="BOILERPLATE"
+  elif grep -qP '^status:\s+(success|failed)' "$TRACE_MD" 2>/dev/null; then
+    STATUS="CLOSED"
+  elif [ $TRACE_AGE_MIN -gt $STALE_MIN ]; then
+    STATUS="STALE"
+  else
+    STATUS="current"
   fi
 else
-  echo "  WARNING: TRACE.md does not exist!"
+  STATUS="MISSING"
 fi
 
-# Commits since TRACE was last updated
+# One-line summary (always first line of output)
+ALERTS=""
+if [ "$STATUS" = "STALE" ] || [ "$STATUS" = "BOILERPLATE" ] || [ "$STATUS" = "MISSING" ] || [ "$STATUS" = "CLOSED" ]; then
+  ALERTS=" [$STATUS]"
+elif [ "$COMMIT_COUNT" -gt "$COMMIT_WARN" ]; then
+  ALERTS=" [${COMMIT_COUNT} commits behind]"
+elif [ "$AGENT_COUNT" -gt "$AGENT_WARN" ]; then
+  ALERTS=" [${AGENT_COUNT} agents untraced]"
+fi
+echo "TRACE: ${COMMIT_COUNT} commits, ${AGENT_COUNT} agents since last update ${TRACE_AGE_MIN}m ago${ALERTS}"
+
+# Detailed output below
+echo ""
+echo "Active TRACE: $TRACE_DIR"
+
+if [ "$STATUS" = "MISSING" ]; then
+  echo "  WARNING: TRACE.md does not exist!"
+elif [ "$STATUS" = "STALE" ]; then
+  echo "  WARNING: TRACE is stale (>${STALE_MIN}m). Update now."
+elif [ "$STATUS" = "BOILERPLATE" ]; then
+  echo "  WARNING: TRACE.md was never populated."
+elif [ "$STATUS" = "CLOSED" ]; then
+  echo "  WARNING: TRACE is closed. Init a new one if starting new work."
+fi
+
 echo ""
 echo "Commits since TRACE update:"
-if [ -f "$TRACE_MD" ]; then
-  NEWER_COMMITS=$(find . -name "*.ts" -o -name "*.js" -o -name "*.css" -o -name "*.html" -newer "$TRACE_MD" 2>/dev/null | grep -v node_modules | grep -v ".traces/" | head -20)
-  COMMIT_COUNT=$(git log --oneline --since="$(stat -c %Y "$TRACE_MD" | xargs -I{} date -d @{} --iso-8601=seconds 2>/dev/null || echo '1 hour ago')" 2>/dev/null | wc -l)
-  echo "  $COMMIT_COUNT commit(s) since last TRACE update"
-  git log --oneline -5 2>/dev/null | sed 's/^/  /'
-fi
+echo "  $COMMIT_COUNT commit(s) since last TRACE update"
+git log --oneline -5 2>/dev/null | sed 's/^/  /'
 
 # Recently modified source files
 echo ""

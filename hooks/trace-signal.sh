@@ -32,11 +32,31 @@ esac
 
 [ -z "$SIGNAL" ] && exit 0
 
-# Find active TRACE from CLAUDE.md if possible
+# Find active TRACE from CLAUDE.md — check file's project root, then CWD
 TRACE_DIR=""
 TRACE_STATUS=""
-if [ -f "CLAUDE.md" ]; then
-  TRACE_DIR=$(grep -oP '\.traces/trace-[^\s`/]+/' CLAUDE.md 2>/dev/null | head -1)
+PROJECT_ROOT=""
+
+# Derive project root from the file being written (walk up to find CLAUDE.md)
+DIR=$(dirname "$FILE_PATH")
+while [ "$DIR" != "/" ] && [ "$DIR" != "." ]; do
+  if [ -f "$DIR/CLAUDE.md" ]; then
+    PROJECT_ROOT="$DIR"
+    break
+  fi
+  DIR=$(dirname "$DIR")
+done
+
+# Fallback to CWD
+if [ -z "$PROJECT_ROOT" ] && [ -f "CLAUDE.md" ]; then
+  PROJECT_ROOT="."
+fi
+
+if [ -n "$PROJECT_ROOT" ]; then
+  TRACE_DIR=$(grep -oP '\.traces/trace-[^\s`/]+/' "$PROJECT_ROOT/CLAUDE.md" 2>/dev/null | head -1)
+  if [ -n "$TRACE_DIR" ]; then
+    TRACE_DIR="$PROJECT_ROOT/$TRACE_DIR"
+  fi
 fi
 
 if [ -n "$TRACE_DIR" ] && [ -f "$TRACE_DIR/TRACE.md" ]; then

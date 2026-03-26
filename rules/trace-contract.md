@@ -23,6 +23,62 @@ optional — it's part of the agent lifecycle, like committing code or running t
 - After finding something unexpected (pivot)
 - Before final commit (outcome classification)
 
+## Checkpoint protocol
+
+TRACE checkpoints fire at every decision point: commits, deploys, issue filings,
+PR creation, agent spawns, and context compaction. They are **blocking** — the
+agent must respond before proceeding.
+
+### When checkpoints fire
+- `git commit` / `git push`
+- `container-ctl.sh restart` / `ensure` (deploy)
+- `gh-ops.sh integrate` / `pr-create` / `pr-merge`
+- `gh-file-issue.sh` (issue filed)
+- `SubagentStart` (agent spawned)
+- `PreCompact` (context about to compress)
+- `SessionStart` (session begins/resumes)
+
+### How to respond to a checkpoint
+
+The checkpoint emits a one-line status:
+```
+TRACE (commit): 3 commits, 1 agents since last update 45m ago — update TRACE before next commit
+```
+
+**Valid responses:**
+1. **Update TRACE.md** — summarize what changed, current decision, what's next
+2. **Reasoned exception** — "TRACE updated 30s ago, no new decisions since"
+   or "rapid iteration on same fix, will batch update after deploy"
+
+**Invalid:** Ignoring it. Proceeding without acknowledging. Treating as informational.
+
+### Escalation levels
+
+| Level | Condition | Message |
+|-------|-----------|---------|
+| 0 (quiet) | <30m, <3 commits | Status only |
+| 1 (drift) | 30-60m with 3+ commits | "update before next commit" |
+| 2 (stale) | >60m OR >5 commits OR BOILERPLATE/CLOSED | "STOP and update TRACE.md now" |
+
+### Script
+
+```bash
+scripts/trace-checkpoint.sh [trigger-label]
+```
+
+General-purpose, callable from hooks, agent prompts, or manual invocation.
+All hooks delegate to this script. Returns one-line status to stdout.
+
+### Hooks (installed in settings.json)
+
+| Hook event | File | Trigger |
+|------------|------|---------|
+| PostToolUse:Bash | `hooks/trace-checkpoint.sh` | commit, push, deploy, gh-ops |
+| PostToolUse:Write/Edit | `hooks/trace-signal.sh` | memory, settings, rules, CLAUDE.md |
+| PreCompact | `hooks/trace-pre-compact.sh` | context compression + snapshot |
+| SessionStart | `hooks/trace-session-start.sh` | session begin/resume/clear |
+| SubagentStart | `hooks/trace-agent-spawn.sh` | agent spawned + log |
+
 ## Orchestrator responsibilities
 
 ### Initialize
@@ -30,6 +86,13 @@ optional — it's part of the agent lifecycle, like committing code or running t
 scripts/trace-init.sh "objective-slug"
 ```
 Pass the TRACE directory path to every agent spawned for this objective.
+Update `CLAUDE.md` with the new trace path immediately.
+
+### Respond to checkpoints
+The orchestrator (main session) owns the TRACE. When a checkpoint fires,
+the orchestrator updates TRACE.md or states why not. Subagents update their
+own TRACE artifacts (strategy/, pivots) but the orchestrator maintains the
+top-level TRACE.md.
 
 ### Harvest
 After agents complete, extract:

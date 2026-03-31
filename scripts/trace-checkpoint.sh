@@ -81,6 +81,16 @@ if [ -f "$AGENT_LOG" ]; then
   AGENT_COUNT=$(grep -c "agent-spawn" "$AGENT_LOG" 2>/dev/null || echo 0)
 fi
 
+# Count decisions: pivots + gh-ops entries
+DECISION_COUNT=0
+PIVOT_COUNT=$(ls "$TRACE_PATH/strategy/pivot_"*.md 2>/dev/null | wc -l || echo 0)
+GH_OPS_LOG="$TRACE_PATH/logs/gh-ops.log"
+GH_OPS_COUNT=0
+if [ -f "$GH_OPS_LOG" ]; then
+  GH_OPS_COUNT=$(grep -c "^\[" "$GH_OPS_LOG" 2>/dev/null || echo 0)
+fi
+DECISION_COUNT=$((PIVOT_COUNT + GH_OPS_COUNT + COMMIT_COUNT))
+
 # Build one-liner with escalating severity
 # Level 0: quiet status (no action needed)
 # Level 1: drift warning (update soon)
@@ -96,12 +106,12 @@ fi
 
 case "$LEVEL" in
   0)
-    echo "TRACE ($TRIGGER): ${COMMIT_COUNT} commits, ${AGENT_COUNT} agents since last update ${TRACE_AGE_MIN}m ago"
+    echo "TRACE ($TRIGGER): ${DECISION_COUNT} decisions, ${COMMIT_COUNT} commits, ${AGENT_COUNT} agents since last update ${TRACE_AGE_MIN}m ago"
     ;;
   1)
-    echo "TRACE ($TRIGGER): ${COMMIT_COUNT} commits, ${AGENT_COUNT} agents since last update ${TRACE_AGE_MIN}m ago — update TRACE before next commit"
+    echo "TRACE ($TRIGGER): ${DECISION_COUNT} decisions, ${COMMIT_COUNT} commits since last update ${TRACE_AGE_MIN}m ago — update TRACE before next commit"
     ;;
   2)
-    echo "TRACE ($TRIGGER): ${COMMIT_COUNT} commits since last update ${TRACE_AGE_MIN}m ago [$STATUS] — STOP and update TRACE.md now. Summarize: what changed since last update, current decision, what's next."
+    echo "TRACE ($TRIGGER): ${DECISION_COUNT} decisions, ${COMMIT_COUNT} commits since last update ${TRACE_AGE_MIN}m ago [$STATUS] — STOP and update TRACE.md now."
     ;;
 esac

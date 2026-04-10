@@ -35,6 +35,7 @@ This repo is both a plugin and a marketplace. The marketplace catalog at `.claud
 | `/devloop:issue` | File a GitHub issue from conversation |
 | `/devloop:release` | Version bump, changelog, tag, publish |
 | `/devloop:agent-trace` | TRACE protocol for capturing development arcs |
+| `/devloop:crystallize` | Extract deterministic ops from skill prose into tested scripts ([design](docs/crystallize.md)) |
 
 ## Hooks
 

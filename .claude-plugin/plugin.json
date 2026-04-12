@@ -9,6 +9,5 @@
   "homepage": "https://github.com/flavordrake/devloop",
   "keywords": ["sdlc", "tdd", "agents", "development", "automation", "cycle"],
   "skills": "./skills/",
-  "agents": "./agents/",
   "hooks": "./hooks.json"
 }

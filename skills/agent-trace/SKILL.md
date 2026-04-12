@@ -1,10 +1,6 @@
 ---
 name: agent-trace
 description: Protocol for capturing a complete development arc (TRACE). Includes telemetry, strategy pivots, logs, and performance metadata. Use this to record the "how and why" of an objective, especially for performance-critical or non-deterministic tasks.
-license: Apache-2.0
-metadata:
-  version: "1.0.0"
-  purpose: AI-Training-Data-Generation
 ---
 
 # Agent TRACE (Trajectory & Runtime Artifact Collection Environment)

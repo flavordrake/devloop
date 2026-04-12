@@ -1,12 +1,13 @@
+---
+name: decompose
+description: Use when the user says "decompose", "break down", "split issue", or explicitly "/decompose N". Breaks a large or composite GitHub issue into independently shippable sub-issues with scope, dependency ordering, and test impact analysis.
+---
+
 # Decompose Issue
 
 Break a large or composite GitHub issue into independently shippable sub-issues.
 Returns a decomposition proposal with sub-issue scope, file lists, dependency ordering,
 and test impact analysis.
-
-## Trigger
-
-Use when the user says "decompose", "break down", "split issue", or explicitly "/decompose N".
 
 ## Input
 

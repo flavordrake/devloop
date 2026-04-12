@@ -1,6 +1,6 @@
 {
   "name": "devloop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TDD-driven SDLC toolchain — cycle, develop, integrate, delegate, trace, and more",
   "author": {
     "name": "flavordrake"
@@ -8,5 +8,7 @@
   "license": "Apache-2.0",
   "homepage": "https://github.com/flavordrake/devloop",
   "keywords": ["sdlc", "tdd", "agents", "development", "automation", "cycle"],
+  "skills": "./skills/",
+  "agents": "./agents/",
   "hooks": "./hooks.json"
 }

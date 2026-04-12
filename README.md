@@ -16,7 +16,8 @@ git clone https://github.com/flavordrake/devloop.git
 claude --plugin-dir ./devloop
 ```
 
-Skills are namespaced: `/devloop:cycle`, `/devloop:develop`, etc.
+When installed via marketplace, skills are namespaced: `/devloop:cycle`, `/devloop:develop`, etc.
+When loaded via `--plugin-dir`, skills register without prefix: `/cycle`, `/develop`, etc.
 
 ## Marketplace
 
@@ -35,7 +36,6 @@ This repo is both a plugin and a marketplace. The marketplace catalog at `.claud
 | `/devloop:issue` | File a GitHub issue from conversation |
 | `/devloop:release` | Version bump, changelog, tag, publish |
 | `/devloop:agent-trace` | TRACE protocol for capturing development arcs |
-| `/devloop:crystallize` | Extract deterministic ops from skill prose into tested scripts ([design](docs/crystallize.md)) |
 
 ## Hooks
 
@@ -43,6 +43,11 @@ Installed automatically with the plugin:
 
 - **enforce-hygiene** (PreToolUse:Bash) — detects compound chains, redirects, heredocs, raw CLI calls
 - **trace-signal** (PostToolUse:Write/Edit) — reminds to update TRACE when decision-signal paths change
+- **trace-checkpoint** (PostToolUse:Bash) — fires on commits, deploys, gh-ops
+- **trace-gh-ops** (PostToolUse:Bash) — logs GitHub operations to active TRACE
+- **trace-session-start** (SessionStart) — checks TRACE status on session begin
+- **trace-pre-compact** (PreCompact) — checkpoints before context compression
+- **trace-agent-spawn** (SubagentStart) — logs agent spawns
 
 ## Rules
 
@@ -58,6 +63,7 @@ Core rules (stack-agnostic):
 | agents | Permissions flow via settings.json allow-list |
 | workflow | Fix the process not the symptom |
 | security | No plaintext secrets, block don't fallback |
+| know-when-to-quit | Recognize divergent fix cycles and stop early |
 
 Platform-specific (in `rules/platform/`, opt-in):
 - **mobile-touch** — textarea swipe constraints, touch-action patterns
@@ -77,10 +83,12 @@ This uses `jq` to merge devloop's recommended permissions into your existing set
 ```
 .claude-plugin/
   plugin.json           Plugin manifest
-  hooks.json            Hook wiring (uses ${CLAUDE_PLUGIN_ROOT})
-skills/                 SDLC skills
+  marketplace.json      Marketplace catalog
+hooks.json              Hook wiring (uses ${CLAUDE_PLUGIN_ROOT})
+skills/                 SDLC skills (SKILL.md per directory)
 agents/                 Agent prompt templates
 hooks/                  Shell hook scripts
+scripts/                Helper scripts (merge-settings, trace utils)
 rules/                  Core rules (stack-agnostic)
   platform/             Platform-specific rules (opt-in)
 ```

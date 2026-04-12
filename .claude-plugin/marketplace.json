@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "devloop",
-      "source": "..",
+      "source": ".",
       "description": "TDD-driven SDLC toolchain — cycle, develop, integrate, delegate, trace, and more",
       "version": "0.3.0",
       "keywords": ["sdlc", "tdd", "agents", "development", "automation", "cycle"],

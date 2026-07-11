@@ -25,8 +25,12 @@
 
 set -euo pipefail
 
+# Resolve this script's real directory even when invoked via a symlink
+# (projects symlink devloop's copy), so sourced libs/helpers are found.
+SELF_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+
 # Load repo guard for safe worktree operations
-source "$(dirname "$0")/lib/repo-guard.sh"
+source "$SELF_DIR/lib/repo-guard.sh"
 
 usage() {
   echo "Usage: scripts/gh-ops.sh <command> [args]" >&2
@@ -286,7 +290,7 @@ case "$CMD" in
     # actually run (--integration-verified). UI-only/docs/test PRs pass through.
     # Optional project-specific integration gate: only enforced when the project
     # provides scripts/integration-required.sh (e.g. mobissh). Generic projects skip it.
-    INTEG_REQ="$(dirname "$0")/integration-required.sh"
+    INTEG_REQ="${SELF_DIR}/integration-required.sh"
     if [ "$INTEGRATION_VERIFIED" -ne 1 ] && [ -x "$INTEG_REQ" ]; then
       if gh pr view "$PR_NUM" --json files --jq '.files[].path' 2>/dev/null \
            | "$INTEG_REQ" --stdin; then

@@ -1,13 +1,17 @@
 # Agents and Delegation
 
-## Agent type reality (confirmed 2026-03-22)
+## Agent type reality (updated 2026-07-11; original finding 2026-03-22)
 
-Custom `subagent_type` names (e.g., `issue-manager`) do NOT resolve to `.claude/agents/*.md`
-files. The Agent tool only accepts built-in types: `general-purpose`, `Explore`, `Plan`,
-`claude-code-guide`, `statusline-setup`. Custom names produce an error.
+Agent types are discovered at SESSION START. Plugin agents (e.g. `devloop:develop`,
+`devloop:spec-writer`) register under their namespaced names and work as `subagent_type`.
+Project-local `.claude/agents/*.md` files created mid-session do NOT register until the
+next session start — spawning them mid-session errors (verified 2026-07-11 with
+scrapdaw's `visual-designer`). Built-ins are always available: `general-purpose`,
+`Explore`, `Plan`, `claude-code-guide`, `statusline-setup`.
 
 **Rules:**
-- **Always use `general-purpose`** as the subagent_type. Scope restriction goes in the prompt, not the agent type.
+- **Verify with a cheap spawn before assuming a custom type resolves**; when in doubt or mid-session, use `general-purpose` with the agent file's content as the prompt. Scope restriction goes in the prompt, not the agent type.
+- Either way, lead the `description` parameter with the role ("Visual designer: revise IA") so the status line scans by role even under a generic type.
 - Agent `.md` files in `.claude/agents/` are **prompt templates only** — read them for the prompt content, but don't rely on frontmatter for execution behavior.
 - Control `run_in_background` and `isolation` via the Agent tool call parameters.
 - For read-only agents (scout, gater): include "Do NOT modify files" in the prompt.

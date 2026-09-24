@@ -19,22 +19,38 @@ set -euo pipefail
 
 TRIGGER="${1:-checkpoint}"
 
-# Find CLAUDE.md — check CWD, parent, subdirectories
-CLAUDE_MD=""
-for candidate in "./CLAUDE.md" "../CLAUDE.md" ./*/CLAUDE.md; do
-  if [ -f "$candidate" ]; then
-    CLAUDE_MD="$candidate"
-    break
+# grep -c prints 0 AND exits 1 on no match, so `|| echo 0` doubled the output ("0\n0").
+# Grep exception from rules/command-hygiene.md.
+count_matches() { grep -c -- "$1" "$2" 2>/dev/null || true; }
+first_trace_ref() { grep -m1 -oP '\.traces/trace-[^\s`/]+/' "$1" 2>/dev/null || true; }
+
+# Find CLAUDE.md: $CLAUDE_PROJECT_DIR, else nearest ancestor of cwd.
+# Never glob into child/sibling dirs — that reported unrelated repos' traces.
+find_claude_md() {
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "$CLAUDE_PROJECT_DIR/CLAUDE.md" ]; then
+    echo "$CLAUDE_PROJECT_DIR/CLAUDE.md"
+    return
   fi
-done
+  local dir
+  dir=$(pwd)
+  while [ ! -f "$dir/CLAUDE.md" ]; do
+    if [ "$dir" = "/" ]; then
+      return
+    fi
+    dir=$(dirname "$dir")
+  done
+  echo "$dir/CLAUDE.md"
+}
+
+CLAUDE_MD=$(find_claude_md)
 
 if [ -z "$CLAUDE_MD" ]; then
   echo "TRACE: no CLAUDE.md found — no active trace"
   exit 0
 fi
 
-REPO_ROOT=$(cd "$(dirname "$CLAUDE_MD")" && pwd)
-TRACE_REL=$(grep -oP '\.traces/trace-[^\s`/]+/' "$CLAUDE_MD" 2>/dev/null | head -1)
+REPO_ROOT=$(dirname "$CLAUDE_MD")
+TRACE_REL=$(first_trace_ref "$CLAUDE_MD")
 
 if [ -z "$TRACE_REL" ]; then
   echo "TRACE: no active trace in CLAUDE.md — init with scripts/trace-init.sh"
@@ -61,7 +77,8 @@ if [ -f "$TRACE_MD" ]; then
   TRACE_AGE_MIN=$(( TRACE_AGE / 60 ))
 
   ISO_SINCE=$(date -d "@$TRACE_MTIME" --iso-8601=seconds 2>/dev/null || echo '1 hour ago')
-  COMMIT_COUNT=$(git -C "$REPO_ROOT" log --oneline --since="$ISO_SINCE" 2>/dev/null | wc -l || echo 0)
+  # Process substitution: a non-repo git failure must not trip pipefail/set -e.
+  COMMIT_COUNT=$(count_matches . <(git -C "$REPO_ROOT" log --oneline --since="$ISO_SINCE" 2>/dev/null))
 
   if grep -q "<!-- Post-mortem" "$TRACE_MD" 2>/dev/null; then
     STATUS="BOILERPLATE"
@@ -78,16 +95,20 @@ fi
 
 AGENT_LOG="$TRACE_PATH/logs/agents.log"
 if [ -f "$AGENT_LOG" ]; then
-  AGENT_COUNT=$(grep -c "agent-spawn" "$AGENT_LOG" 2>/dev/null || echo 0)
+  AGENT_COUNT=$(count_matches "agent-spawn" "$AGENT_LOG")
 fi
 
 # Count decisions: pivots + gh-ops entries
 DECISION_COUNT=0
-PIVOT_COUNT=$(ls "$TRACE_PATH/strategy/pivot_"*.md 2>/dev/null | wc -l || echo 0)
+# nullglob array instead of `ls | wc -l`, which had the same doubled-0 shape with no pivots.
+shopt -s nullglob
+PIVOTS=("$TRACE_PATH"/strategy/pivot_*.md)
+shopt -u nullglob
+PIVOT_COUNT=${#PIVOTS[@]}
 GH_OPS_LOG="$TRACE_PATH/logs/gh-ops.log"
 GH_OPS_COUNT=0
 if [ -f "$GH_OPS_LOG" ]; then
-  GH_OPS_COUNT=$(grep -c "^\[" "$GH_OPS_LOG" 2>/dev/null || echo 0)
+  GH_OPS_COUNT=$(count_matches "^\[" "$GH_OPS_LOG")
 fi
 DECISION_COUNT=$((PIVOT_COUNT + GH_OPS_COUNT + COMMIT_COUNT))
 

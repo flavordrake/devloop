@@ -29,6 +29,8 @@ if [ -n "$CLAUDE_MD" ]; then
     {
       echo "# Pre-Compact Snapshot $TIMESTAMP"
       echo ""
+      echo "$CTX"
+      echo ""
       git -C "$REPO_ROOT" log --oneline -5 2>/dev/null
       echo ""
       git -C "$REPO_ROOT" status --porcelain 2>/dev/null | head -20
@@ -36,9 +38,7 @@ if [ -n "$CLAUDE_MD" ]; then
   fi
 fi
 
-jq -n --arg ctx "$CTX" '{
-  hookSpecificOutput: {
-    hookEventName: "PreCompact",
-    additionalContext: $ctx
-  }
-}'
+# PreCompact honors only decision/reason (to block) and has no additionalContext
+# channel; hookSpecificOutput fails validation. So emit no JSON: the status line
+# goes into the snapshot above and to stderr, which on exit 0 lands in the debug log.
+echo "$CTX" >&2

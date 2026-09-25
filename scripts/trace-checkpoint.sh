@@ -22,25 +22,8 @@ TRIGGER="${1:-checkpoint}"
 # grep -c prints 0 AND exits 1 on no match, so `|| echo 0` doubled the output ("0\n0").
 # Grep exception from rules/command-hygiene.md.
 count_matches() { grep -c -- "$1" "$2" 2>/dev/null || true; }
-first_trace_ref() { grep -m1 -oP '\.traces/trace-[^\s`/]+/' "$1" 2>/dev/null || true; }
-
-# Find CLAUDE.md: $CLAUDE_PROJECT_DIR, else nearest ancestor of cwd.
-# Never glob into child/sibling dirs — that reported unrelated repos' traces.
-find_claude_md() {
-  if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "$CLAUDE_PROJECT_DIR/CLAUDE.md" ]; then
-    echo "$CLAUDE_PROJECT_DIR/CLAUDE.md"
-    return
-  fi
-  local dir
-  dir=$(pwd)
-  while [ ! -f "$dir/CLAUDE.md" ]; do
-    if [ "$dir" = "/" ]; then
-      return
-    fi
-    dir=$(dirname "$dir")
-  done
-  echo "$dir/CLAUDE.md"
-}
+# find_claude_md, first_trace_ref; $0-relative so it resolves from the plugin cache.
+source "$(dirname "$0")/lib/trace-locate.sh"
 
 CLAUDE_MD=$(find_claude_md)
 

@@ -16,19 +16,17 @@ CWD=$(echo "$INPUT" | jq -r '.cwd // "."')
 OUTPUT=$(echo "$INPUT" | jq -r '.tool_response.stdout // empty')
 TIMESTAMP=$(date +%Y%m%dT%H%M%S%z)
 
-# Find active TRACE
-CLAUDE_MD=""
-for candidate in "$CWD/CLAUDE.md" "$CWD/../CLAUDE.md" "$CWD"/*/CLAUDE.md; do
-  if [ -f "$candidate" ]; then
-    CLAUDE_MD="$candidate"
-    break
-  fi
-done
+# Source before cd, so a relative $0 still resolves.
+source "$(dirname "$0")/../scripts/lib/trace-locate.sh"
+# find_claude_md walks up from pwd, so start from the session cwd.
+# Pure logging: an unreachable cwd means no trace to write, not an error.
+cd "$CWD" 2>/dev/null || exit 0
+CLAUDE_MD=$(find_claude_md)
 
 [ -z "$CLAUDE_MD" ] && exit 0
 
 REPO_ROOT=$(dirname "$CLAUDE_MD")
-TRACE_DIR=$(grep -oP '\.traces/trace-[^\s`/]+/' "$CLAUDE_MD" 2>/dev/null | head -1)
+TRACE_DIR=$(first_trace_ref "$CLAUDE_MD")
 
 [ -z "$TRACE_DIR" ] && exit 0
 [ ! -d "$REPO_ROOT/$TRACE_DIR" ] && exit 0

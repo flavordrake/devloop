@@ -16,7 +16,7 @@ devloop's shipped scripts. Call them through the plugin (`${CLAUDE_PLUGIN_ROOT}/
 | `gh-ops.sh reopen ISSUE [--comment T]` | reopen |
 | `gh-ops.sh search QUERY [LIMIT]` | open issues as JSON |
 | `gh-ops.sh version` | code hash, plus the app version when `GH_OPS_APP_PORT` names a local app port |
-| `gh-ops.sh pr-create --head B --title T --body-file F [--label L]` | open a PR |
+| `gh-ops.sh pr-create --head B [--base A] --title T --body-file F [--label L]` | open a PR (`--base` for a stacked PR) |
 | `gh-ops.sh pr-edit PR [--title T] [--body-file F] [--body T]` | edit an open PR |
 | `gh-ops.sh pr-view PR [gh pr view flags]` | read-only PR state |
 | `gh-ops.sh pr-merge PR [--squash\|--merge\|--rebase]` | merge, delete branch |
@@ -41,6 +41,7 @@ devloop's shipped scripts. Call them through the plugin (`${CLAUDE_PLUGIN_ROOT}/
 
 ## Plugin
 
+- `scripts/devloop-path.sh`: print the newest installed devloop root for shell callers that have no `${CLAUDE_PLUGIN_ROOT}`. `DEVLOOP_ROOT` overrides; `CLAUDE_CONFIG_DIR` (default `~/.claude`) locates the plugin cache; with no cache it prints its own checkout.
 - `scripts/validate-plugin.sh`: `claude plugin validate` plus skill frontmatter checks.
 - `scripts/fast-gate.sh`: devloop's own fast gate (validate-plugin, `scripts/test/`, doc parity warning).
 

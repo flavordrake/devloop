@@ -75,6 +75,11 @@ expect_call "comment-args" "issue comment 5 --body hello there"
 run label-create needs-spec --color ff0000 --description "Needs a spec"
 expect_call "label-create-args" "label create needs-spec --color ff0000 --description Needs a spec"
 
+run pr-create --head feat/b --title T --body B
+expect_call "pr-create-default-base" "pr create --head feat/b --title T --body B"
+run pr-create --head feat/b --base feat/a --title T --body B
+expect_call "pr-create-stacked-base" "pr create --head feat/b --title T --body B --base feat/a"
+
 run pr-edit 3 --title T --body B
 expect_call "pr-edit-args" "pr edit 3 --body B --title T"
 run pr-edit 3

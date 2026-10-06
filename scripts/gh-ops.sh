@@ -16,7 +16,7 @@
 #   reopen  ISSUE [--comment "TEXT"]      Reopen with optional comment
 #   search  QUERY [LIMIT]                 Search open issues, JSON output
 #   version                               Print code hash (+ app version if GH_OPS_APP_PORT)
-#   pr-create --head BRANCH --title T --body-file F [--label L ...]  Create PR
+#   pr-create --head BRANCH [--base BRANCH] --title T --body-file F [--label L ...]  Create PR (--base for stacked PRs)
 #   pr-edit   PR_NUM [--title T] [--body-file F] [--body TEXT]  Edit an open PR
 #   pr-view   PR_NUM [gh pr view flags]   Read-only PR state
 #   pr-merge  PR_NUM [--squash|--merge|--rebase]  Merge and delete branch
@@ -249,6 +249,7 @@ case "$CMD" in
 
   pr-create)
     HEAD=""
+    BASE=""
     TITLE=""
     BODY=""
     BODY_FILE=""
@@ -256,6 +257,7 @@ case "$CMD" in
     while [[ $# -gt 0 ]]; do
       case $1 in
         --head) HEAD="$2"; shift 2 ;;
+        --base) BASE="$2"; shift 2 ;;
         --title) TITLE="$2"; shift 2 ;;
         --body) BODY="$2"; shift 2 ;;
         --body-file) BODY_FILE="$2"; shift 2 ;;
@@ -271,6 +273,7 @@ case "$CMD" in
       BODY="Bot PR for ${HEAD}"
     fi
     ARGS=(--head "$HEAD" --title "$TITLE" --body "$BODY")
+    [ -z "$BASE" ] || ARGS+=(--base "$BASE")
     for l in "${PR_LABELS[@]+"${PR_LABELS[@]}"}"; do
       ARGS+=(--label "$l")
     done

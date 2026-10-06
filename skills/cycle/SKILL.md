@@ -15,7 +15,7 @@ summary of what shipped and what's next.
 - `/cycle "ime text entry"` — explicit theme keywords
 - `/cycle --dry-run` — discover and plan only, don't develop
 
-Labels and gate tiers come from `.claude/process.md` (gate contract: the `gates.md` rule).
+Labels and gate tiers come from `AGENTS.md` (gate contract: the `gates.md` rule).
 If a TRACE is active, follow the agent-trace skill.
 
 ## Phase 0.5: Surface Unworked Issues
@@ -163,7 +163,7 @@ For each FAIL, append to `memory/bot-attempts.md`.
 
 ## Label Management
 
-Per `.claude/process.md`:
+Per `AGENTS.md`:
 - Developed: apply `bot` label
 - Failed: apply `divergence`, remove `bot`
 - Merged issues: close secondaries with comment

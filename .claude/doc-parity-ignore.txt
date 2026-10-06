@@ -18,6 +18,10 @@ path:.claude/rules/devloop/
 path:.claude/rules/security.md
 path:.claude/settings.json
 path:.claude/hooks/
+# Legacy consumer config (deprecated, still read) and the gates.md example's
+# release script; devloop has neither (#11, 2026-10-06).
+path:.claude/process.md
+path:scripts/release-gate.sh
 
 # docs/crystallize.md is a design proposal; these are not built (#11, 2026-10-06).
 crystallize-audit.sh

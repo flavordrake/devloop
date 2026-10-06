@@ -5,7 +5,7 @@ description: Use when the user says "bug:", "feature:", "feat:", "fix:", "issue:
 
 # Issue Filing
 
-Labels, domain labels, and the issue tracker come from the repo's `.claude/process.md`.
+Labels, domain labels, and the issue tracker come from the repo's `AGENTS.md`.
 
 File an issue from an in-conversation observation. The user types something like
 `bug: default URL is missing /ssh` and expects it handled without derailing current work.
@@ -28,8 +28,8 @@ Apply exactly one **Type** label:
 | chore: | `chore` | chore: |
 | issue: | (classify from description) | (classify from description) |
 
-Add **Domain** labels from the domain list in `.claude/process.md` when the description
-matches. If process.md declares none, add none.
+Add **Domain** labels from the domain list in `AGENTS.md` when the description
+matches. If AGENTS.md declares none, add none.
 
 Add **Shape** labels when applicable:
 
@@ -52,7 +52,7 @@ Concise body, no filler:
 - **Version**: `scripts/gh-ops.sh version` (code hash; flags a stale running build if the
   repo reports one).
 - **Evidence**: if the repo declares repro artifacts (test reports, screenshots, recordings,
-  logs) in `.claude/process.md`, attach recent ones (last ~30 minutes) clearly tied to the
+  logs) in `AGENTS.md`, attach recent ones (last ~30 minutes) clearly tied to the
   issue. Otherwise omit.
 
 ## Step 3: Duplicate check and file
@@ -82,7 +82,7 @@ Filed while working on <context> (<branch>).
 
 **Tracker `local:<path>`**: append an entry to `<path>` following the format already used
 in that file (title line with type/labels, then the body). Commit it only if the repo's
-process.md says backlog edits are committed.
+AGENTS.md says backlog edits are committed.
 
 ## Step 4: Report back
 
@@ -92,4 +92,4 @@ process.md says backlog edits are committed.
 
 - Bare prefix with no description (just `bug:`) -- ask for at least a phrase
 - `gh` not authenticated -- report immediately
-- Only use labels defined in `.claude/process.md`
+- Only use labels defined in `AGENTS.md`

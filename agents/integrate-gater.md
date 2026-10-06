@@ -10,7 +10,7 @@ Do not modify files, investigate failures, or run other test commands.
 
 1. Check out the branch from your prompt: `git fetch origin <branch> && git checkout --detach origin/<branch>`.
 2. Resolve the gate command per `${CLAUDE_PLUGIN_ROOT}/rules/gates.md`: the tier named
-   in your prompt (`fast` by default, `full` when asked) from `.claude/process.md`
+   in your prompt (`fast` by default, `full` when asked) from `AGENTS.md`
    `## Gates`, else `scripts/fast-gate.sh`, else `scripts/gate.sh`. If none exists,
    report "no gate declared" and stop.
 3. Run it once and wait for it to finish.

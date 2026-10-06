@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# scripts/trace-attach.sh — Download a testhost file into a TRACE's artifacts/ directory
+# scripts/trace-attach.sh — Download a file URL into a TRACE's artifacts/ directory
 #
-# Usage:
+# Usage (trace-dir is relative to the current directory, i.e. the project):
 #   scripts/trace-attach.sh <trace-dir> <file-url>
 #
-# Examples:
-#   scripts/trace-attach.sh .traces/trace-issue-42/ http://localhost:9090/file/2026-03-24/screenshot.png
-#   scripts/trace-attach.sh .traces/trace-issue-42/ http://localhost:9090/file/2026-03-24/log.txt
+# Example:
+#   scripts/trace-attach.sh .traces/trace-issue-42/ http://localhost:9090/file/screenshot.png
 #
 # The file is saved to <trace-dir>/artifacts/<original-filename>.
 # If a file with the same name exists, a -1, -2 suffix is added.
+# Set TESTHOST_AUTH_TOKEN to send a bearer token.
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
 
 TRACE_DIR="${1:-}"
 FILE_URL="${2:-}"

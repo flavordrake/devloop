@@ -1,28 +1,45 @@
 #!/bin/bash
-# PostToolUse:Bash hook — thin wrapper around scripts/trace-checkpoint.sh
-# Detects decision-point commands and emits TRACE status as additionalContext.
+# PostToolUse:Bash hook — TRACE status after a `git commit`. Silent for any
+# other command, and silent when no trace is active.
 
 INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+COMMAND=$(jq -r '.tool_input.command // empty' <<<"$INPUT")
+CWD=$(jq -r '.cwd // "."' <<<"$INPUT")
 
-# Classify the command — exit early for non-decision commands
-TRIGGER=""
-case "$COMMAND" in
-  *"git commit"*) TRIGGER="commit" ;;
-  *"git push"*) TRIGGER="push" ;;
-  *container-ctl.sh*restart*|*container-ctl.sh*ensure*) TRIGGER="deploy" ;;
-  *gh-ops.sh*integrate*) TRIGGER="integrate" ;;
-  *gh-ops.sh*pr-create*|*gh-ops.sh*pr-merge*) TRIGGER="pr" ;;
-  *gh-file-issue.sh*) TRIGGER="issue-filed" ;;
-  *gh-ops.sh*comment*) TRIGGER="comment" ;;
-  *gh-ops.sh*labels*) TRIGGER="labels" ;;
-  *trace-init.sh*|*trace-check.sh*) TRIGGER="trace-mgmt" ;;
-  *) exit 0 ;;
-esac
+# is_git_commit — true if any simple command in $COMMAND is `git [opts] commit`.
+# Parsed by command word, not substring: `cat scripts/gh-ops.sh` or
+# `echo "git commit"` must not fire.
+is_git_commit() {
+  local cmds="$COMMAND" seg
+  cmds=${cmds//&&/$'\n'}
+  cmds=${cmds//||/$'\n'}
+  cmds=${cmds//;/$'\n'}
+  cmds=${cmds//|/$'\n'}
+  while IFS= read -r seg; do
+    set -f
+    # shellcheck disable=SC2086 # split the segment into words on purpose
+    set -- $seg
+    set +f
+    while [ $# -gt 0 ] && [[ "$1" == *=* ]]; do shift; done
+    [ "${1:-}" = git ] || continue
+    shift
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        commit) return 0 ;;
+        -C|-c|--git-dir|--work-tree) shift; [ $# -gt 0 ] && shift ;;
+        -*) shift ;;
+        *) break ;;
+      esac
+    done
+  done <<<"$cmds"
+  return 1
+}
 
-# Run the general-purpose checkpoint script
-SCRIPT_DIR="$(dirname "$0")/../scripts"
-CTX=$("$SCRIPT_DIR/trace-checkpoint.sh" "$TRIGGER" 2>/dev/null || echo "TRACE ($TRIGGER): status unavailable")
+is_git_commit || exit 0
+cd "$CWD" || exit 0
+
+CTX=$("$(dirname "$0")/../scripts/trace-checkpoint.sh" commit)
+[ -n "$CTX" ] || exit 0
 
 jq -n --arg ctx "$CTX" '{
   hookSpecificOutput: {

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # scripts/trace-check.sh — Check active TRACE freshness and suggest updates
 #
-# Usage:
+# Usage (from anywhere inside the project):
 #   scripts/trace-check.sh              # auto-detect active trace from CLAUDE.md
-#   scripts/trace-check.sh <trace-dir>  # check a specific trace
+#   scripts/trace-check.sh <trace-dir>  # check a specific trace (relative to cwd)
 #
 # Reports:
 #   - TRACE last modified time
@@ -12,20 +12,29 @@
 #   - Missing TRACE sections (pivots, knowledge seed, etc.)
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
 
-# Find active TRACE
+# $0-relative so it resolves from the plugin cache; everything else uses the project.
+source "$(dirname "$0")/lib/trace-locate.sh"
+
+CLAUDE_MD=$(find_claude_md)
+if [ -n "$CLAUDE_MD" ]; then
+  REPO_ROOT=$(dirname "$CLAUDE_MD")
+else
+  # Outside a git repo, fall back to cwd.
+  REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+fi
+
 TRACE_DIR="${1:-}"
-if [ -z "$TRACE_DIR" ]; then
-  if [ -f "CLAUDE.md" ]; then
-    TRACE_DIR=$(grep -oP '\.traces/trace-[^\s`/]+/' CLAUDE.md 2>/dev/null | head -1)
+if [ -z "$TRACE_DIR" ] && [ -n "$CLAUDE_MD" ]; then
+  TRACE_REL=$(first_trace_ref "$CLAUDE_MD")
+  if [ -n "$TRACE_REL" ]; then
+    TRACE_DIR="$REPO_ROOT/$TRACE_REL"
   fi
 fi
 
 if [ -z "$TRACE_DIR" ] || [ ! -d "$TRACE_DIR" ]; then
   echo "No active TRACE found."
-  echo "  Init one: scripts/trace-init.sh <objective-slug>"
-  echo "  Reference it in CLAUDE.md: > **Active TRACE**: \`.traces/trace-...\`"
+  echo "  Init one: ${CLAUDE_PLUGIN_ROOT:-<devloop>}/scripts/trace-init.sh <objective-slug>"
   exit 0
 fi
 
@@ -34,32 +43,22 @@ TRACE_MD="$TRACE_DIR/TRACE.md"
 # Thresholds for forcing a trace update
 STALE_MIN=60        # >60m since last update = stale
 COMMIT_WARN=5       # >5 commits since update = falling behind
-AGENT_WARN=3        # >3 agent runs since update = significant untraced work
 
-# Gather metrics
 TRACE_AGE_MIN=0
 COMMIT_COUNT=0
-AGENT_COUNT=0
 STATUS="unknown"
 
 if [ -f "$TRACE_MD" ]; then
-  TRACE_MTIME=$(stat -c %Y "$TRACE_MD" 2>/dev/null || echo 0)
-  TRACE_AGE=$(( $(date +%s) - TRACE_MTIME ))
+  TRACE_AGE=$(( $(date +%s) - $(file_mtime "$TRACE_MD") ))
   TRACE_AGE_MIN=$(( TRACE_AGE / 60 ))
+  # Relative --since avoids GNU-only `date -d`; process substitution keeps a non-repo failure from tripping set -e.
+  COMMIT_COUNT=$(count_matches . <(git -C "$REPO_ROOT" log --oneline --since="${TRACE_AGE} seconds ago" 2>/dev/null))
 
-  ISO_SINCE=$(date -d "@$TRACE_MTIME" --iso-8601=seconds 2>/dev/null || echo '1 hour ago')
-  COMMIT_COUNT=$(git log --oneline --since="$ISO_SINCE" 2>/dev/null | wc -l)
-
-  AGENT_LOG="$TRACE_DIR/logs/agents.log"
-  if [ -f "$AGENT_LOG" ]; then
-    AGENT_COUNT=$(grep -c "agent-spawn" "$AGENT_LOG" 2>/dev/null || echo 0)
-  fi
-
-  if grep -q "<!-- Post-mortem" "$TRACE_MD" 2>/dev/null; then
-    STATUS="BOILERPLATE"
-  elif grep -qP '^status:\s+(success|failed)' "$TRACE_MD" 2>/dev/null; then
+  if trace_closed "$TRACE_MD"; then
     STATUS="CLOSED"
-  elif [ $TRACE_AGE_MIN -gt $STALE_MIN ]; then
+  elif grep -q "<!-- Post-mortem" "$TRACE_MD"; then
+    STATUS="BOILERPLATE"
+  elif [ "$TRACE_AGE_MIN" -gt "$STALE_MIN" ]; then
     STATUS="STALE"
   else
     STATUS="current"
@@ -70,53 +69,40 @@ fi
 
 # One-line summary (always first line of output)
 ALERTS=""
-if [ "$STATUS" = "STALE" ] || [ "$STATUS" = "BOILERPLATE" ] || [ "$STATUS" = "MISSING" ] || [ "$STATUS" = "CLOSED" ]; then
+if [ "$STATUS" != "current" ]; then
   ALERTS=" [$STATUS]"
 elif [ "$COMMIT_COUNT" -gt "$COMMIT_WARN" ]; then
   ALERTS=" [${COMMIT_COUNT} commits behind]"
-elif [ "$AGENT_COUNT" -gt "$AGENT_WARN" ]; then
-  ALERTS=" [${AGENT_COUNT} agents untraced]"
 fi
-echo "TRACE: ${COMMIT_COUNT} commits, ${AGENT_COUNT} agents since last update ${TRACE_AGE_MIN}m ago${ALERTS}"
+echo "TRACE: ${COMMIT_COUNT} commits since last update ${TRACE_AGE_MIN}m ago${ALERTS}"
 
-# Detailed output below
 echo ""
 echo "Active TRACE: $TRACE_DIR"
+case "$STATUS" in
+  MISSING) echo "  WARNING: TRACE.md does not exist!" ;;
+  STALE) echo "  WARNING: TRACE is stale (>${STALE_MIN}m). Update now." ;;
+  BOILERPLATE) echo "  NOTE: TRACE.md summary sections not yet populated." ;;
+  CLOSED) echo "  NOTE: TRACE is closed. Init a new one if starting new work." ;;
+esac
 
-if [ "$STATUS" = "MISSING" ]; then
-  echo "  WARNING: TRACE.md does not exist!"
-elif [ "$STATUS" = "STALE" ]; then
-  echo "  WARNING: TRACE is stale (>${STALE_MIN}m). Update now."
-elif [ "$STATUS" = "BOILERPLATE" ]; then
-  echo "  WARNING: TRACE.md was never populated."
-elif [ "$STATUS" = "CLOSED" ]; then
-  echo "  WARNING: TRACE is closed. Init a new one if starting new work."
-fi
+# Report below is best-effort: `| head` may SIGPIPE find, which pipefail would make fatal.
+set +o pipefail
 
 echo ""
-echo "Commits since TRACE update:"
-echo "  $COMMIT_COUNT commit(s) since last TRACE update"
-git log --oneline -5 2>/dev/null | sed 's/^/  /'
+echo "Commits since TRACE update: $COMMIT_COUNT"
+git -C "$REPO_ROOT" log --oneline -5 | sed 's/^/  /'
 
-# Recently modified source files
 echo ""
 echo "Recently modified files (last 30 min):"
-find . -name "*.ts" -o -name "*.js" -o -name "*.css" -o -name "*.html" -o -name "*.sh" 2>/dev/null \
-  | grep -v node_modules | grep -v ".traces/" | grep -v public/modules/ \
-  | while read -r f; do
-    MTIME=$(stat -c %Y "$f" 2>/dev/null || echo 0)
-    AGE=$(( $(date +%s) - MTIME ))
-    if [ $AGE -lt 1800 ]; then
-      echo "  $f ($(( AGE / 60 ))m ago)"
-    fi
-  done
+find "$REPO_ROOT" -type f -mmin -30 \
+  -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/.traces/*' \
+  | head -20 | sed "s|^$REPO_ROOT/|  |"
 
-# Check TRACE completeness
 echo ""
 echo "TRACE completeness:"
 if [ -f "$TRACE_MD" ]; then
   check_section() {
-    if grep -q "$1" "$TRACE_MD" 2>/dev/null; then
+    if grep -q "$1" "$TRACE_MD"; then
       if grep -A1 "$1" "$TRACE_MD" | grep -q "<!--"; then
         echo "  EMPTY: $1"
       else
@@ -133,15 +119,17 @@ if [ -f "$TRACE_MD" ]; then
   check_section "Outcome Classification"
 fi
 
-# Check for pivots
 echo ""
-PIVOT_COUNT=$(ls "$TRACE_DIR/strategy/pivot_"*.md 2>/dev/null | wc -l)
-echo "Pivots recorded: $PIVOT_COUNT"
-if [ $PIVOT_COUNT -eq 0 ]; then
+shopt -s nullglob
+PIVOTS=("$TRACE_DIR"/strategy/pivot_*.md)
+shopt -u nullglob
+echo "Pivots recorded: ${#PIVOTS[@]}"
+if [ "${#PIVOTS[@]}" -eq 0 ]; then
   echo "  (none — if strategy changed, record a pivot)"
 fi
 
-# Memory updates since TRACE
-echo ""
-echo "Memory updates (check if harvested into TRACE):"
-find /home/dev/.claude/projects/ -name "*.md" -newer "$TRACE_MD" 2>/dev/null | head -5 | sed 's/^/  /'
+if [ -f "$TRACE_MD" ] && [ -d "$HOME/.claude/projects" ]; then
+  echo ""
+  echo "Memory updates (check if harvested into TRACE):"
+  find "$HOME/.claude/projects" -name "*.md" -newer "$TRACE_MD" | head -5 | sed 's/^/  /'
+fi

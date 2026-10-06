@@ -28,31 +28,43 @@ if [ "$MISSING_FRONTMATTER" -eq 1 ]; then
   exit 1
 fi
 
-# 3. Verify all hook scripts are executable
+# 3. Verify all hook and script entry points are executable (lib/ is sourced, not run)
 NONEXEC=0
-for hook in "$PLUGIN_ROOT"/hooks/*.sh; do
-  if [ ! -x "$hook" ]; then
-    echo "FAIL: not executable: $hook"
+for script in "$PLUGIN_ROOT"/hooks/*.sh "$PLUGIN_ROOT"/scripts/*.sh "$PLUGIN_ROOT"/scripts/test/*.sh; do
+  if [ ! -x "$script" ]; then
+    echo "FAIL: not executable: $script"
     NONEXEC=1
   fi
 done
 
 if [ "$NONEXEC" -eq 1 ]; then
-  echo "Some hook scripts are not executable"
+  echo "Some scripts are not executable"
   exit 1
 fi
 
-# 4. Verify hooks.json references exist
-MISSING_HOOKS=0
-for ref in $(grep -oP '\$\{CLAUDE_PLUGIN_ROOT\}/\K[^"]+' "$PLUGIN_ROOT/hooks.json"); do
+# 4. Every hooks.json command must quote the plugin root ("${CLAUDE_PLUGIN_ROOT}/..."),
+#    or a path with spaces breaks; and every referenced file must exist.
+BAD_HOOKS=0
+while IFS= read -r cmd; do
+  case "$cmd" in
+    *CLAUDE_PLUGIN_ROOT*) ;;
+    *) continue ;;
+  esac
+  if [[ "$cmd" != \"\$\{CLAUDE_PLUGIN_ROOT\}/*\"* ]]; then
+    echo "FAIL: hooks.json command does not quote \${CLAUDE_PLUGIN_ROOT}: $cmd"
+    BAD_HOOKS=1
+    continue
+  fi
+  ref=${cmd#\"\$\{CLAUDE_PLUGIN_ROOT\}/}
+  ref=${ref%%\"*}
   if [ ! -f "$PLUGIN_ROOT/$ref" ]; then
     echo "FAIL: hooks.json references missing file: $ref"
-    MISSING_HOOKS=1
+    BAD_HOOKS=1
   fi
-done
+done < <(jq -r '.. | objects | .command? // empty' "$PLUGIN_ROOT/hooks.json")
 
-if [ "$MISSING_HOOKS" -eq 1 ]; then
-  echo "Some hook script references are broken"
+if [ "$BAD_HOOKS" -eq 1 ]; then
+  echo "Some hooks.json commands are broken"
   exit 1
 fi
 

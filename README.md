@@ -46,7 +46,7 @@ Spawn as `subagent_type: devloop:<name>`. Frontmatter sets tools, model, and iso
 
 ## Hooks
 
-Installed with the plugin: `enforce-hygiene` (PreToolUse:Bash, nudges toward scripts and wrappers) and TRACE hooks (session start, pre-compact snapshot, commit checkpoint), which stay silent when no trace is active.
+Installed with the plugin: `enforce-hygiene` (PreToolUse:Bash, points raw `gh` calls at `gh-ops.sh`; never approves or blocks) and TRACE hooks (session start, pre-compact snapshot, commit checkpoint), which stay silent when no trace is active.
 
 ## Rules
 

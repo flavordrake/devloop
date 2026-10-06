@@ -1,27 +1,34 @@
 #!/usr/bin/env bash
 # scripts/gh-ops.sh — Common GitHub issue operations
 #
-# Wraps gh issue comment/edit/close so Claude Code can approve a single
-# `bash scripts/gh-ops.sh` call instead of per-command approval for
+# Wraps gh issue/pr commands so Claude Code can approve a single
+# `scripts/gh-ops.sh` call instead of per-command approval for
 # compound label/comment operations.
 #
 # Subcommands:
 #   comment ISSUE --body-file FILE        Add comment from file
 #   comment ISSUE --body "TEXT"           Add comment from string
+#   comments ISSUE                        Print an issue's comments
 #   labels  ISSUE [--add L ...] [--rm L ...]  Edit labels
+#   label-create NAME [--color HEX] [--description TEXT]  Create a repo label
 #   close   ISSUE [--comment "TEXT"]      Close with optional comment
 #   close   ISSUE [--body-file FILE]      Close with comment from file
-#   search  QUERY                         Search open issues, JSON output
-#   version                               Print code hash + server meta
+#   reopen  ISSUE [--comment "TEXT"]      Reopen with optional comment
+#   search  QUERY [LIMIT]                 Search open issues, JSON output
+#   version                               Print code hash (+ app version if GH_OPS_APP_PORT)
 #   pr-create --head BRANCH --title T --body-file F [--label L ...]  Create PR
+#   pr-edit   PR_NUM [--title T] [--body-file F] [--body TEXT]  Edit an open PR
+#   pr-view   PR_NUM [gh pr view flags]   Read-only PR state
 #   pr-merge  PR_NUM [--squash|--merge|--rebase]  Merge and delete branch
 #   pr-close  PR_NUM [--comment "TEXT"]   Close PR with optional comment
-#   integrate PR_NUM ISSUE_NUM [--merge|--squash|--rebase]  Merge PR, close issue, pull main
+#   integrate PR_NUM ISSUE_NUM [--merge|--squash|--rebase]  Merge PR, close issue, update local base
 #   delegate  ISSUE_NUM [--label L ...]   Label bot, audit comment, prune stale refs
-#   fetch-issues N1,N2,N3 [--out FILE]   Fetch issue bodies to file (default: $MOBISSH_TMPDIR/fetched-issues.md)
+#   fetch-issues N1,N2,N3 [--out FILE]   Print issue bodies (stdout, or FILE)
 #   release TAG --title T [--notes-file F] [--target SHA] [ASSET ...]  Create a GitHub release (+ tag) with optional assets
 #
-# All progress goes to stderr, actionable output to stdout.
+# Acts on the repo of the caller's cwd, also when symlinked into a project or
+# run from the plugin cache. All progress goes to stderr, actionable output to
+# stdout.
 
 set -euo pipefail
 
@@ -33,8 +40,8 @@ SELF_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 source "$SELF_DIR/lib/repo-guard.sh"
 
 usage() {
-  echo "Usage: scripts/gh-ops.sh <command> [args]" >&2
-  echo "Commands: comment, labels, close, reopen, search, version, pr-create, pr-merge, pr-close, integrate, delegate, fetch-issues, release" >&2
+  echo "Usage: gh-ops.sh <command> [args]" >&2
+  echo "Commands: comment, comments, labels, label-create, close, reopen, search, version, pr-create, pr-edit, pr-view, pr-merge, pr-close, integrate, delegate, fetch-issues, release" >&2
   exit 1
 }
 
@@ -42,25 +49,60 @@ usage() {
 
 CMD="$1"; shift
 
-# Clean worktrees and local branch for a PR before merge
+# _worktree_holding BRANCH — print the path of every worktree that has BRANCH checked out.
+_worktree_holding() {
+  git worktree list --porcelain \
+    | awk -v b="refs/heads/$1" '/^worktree /{p=substr($0, 10)} /^branch /{if($2==b) print p}'
+}
+
+# _issue_has_label ISSUE LABEL — jq instead of `| grep -q`, which can SIGPIPE gh under pipefail.
+_issue_has_label() {
+  [ "$(gh issue view "$1" --json labels --jq "any(.labels[]; .name == \"$2\")")" = "true" ]
+}
+
+# _cleanup_pr_worktree PR_NUM — remove agent worktrees holding the PR branch and
+# the local branch before merge. Sets PR_HEAD_BRANCH, and WORKTREE_HELD=1 when a
+# worktree outside .claude/worktrees/ (or the main checkout) still holds the
+# branch, so the caller must not ask `gh pr merge` to --delete-branch: that
+# fails the same way and exits 1 although the merge succeeded (#125, upstreamed
+# from opsurface/mobiharness). Called plainly, not in `if`, so set -e applies.
+WORKTREE_HELD=0
+PR_HEAD_BRANCH=""
 _cleanup_pr_worktree() {
-  local pr_num="$1"
-  local branch
-  branch=$(gh pr view "$pr_num" --json headRefName --jq '.headRefName' 2>/dev/null || true)
-  if [ -n "$branch" ]; then
-    git worktree list --porcelain | awk -v b="$branch" '/^worktree /{p=$2} /^branch /{if($2=="refs/heads/"b) print p}' | while read -r wt; do
-      # SAFETY: never rm -rf the main repo
-      if is_main_repo "$wt"; then
-        echo "BLOCKED: refusing to delete main repo at $wt" >&2
-      else
-        safe_rm_worktree "$wt" || true
-      fi
-    done
-    git worktree prune 2>/dev/null || true
-    if ! git branch -D "$branch" 2>/dev/null; then
-      echo "Skipping local branch deletion — worktree holds it (cleanup deferred to release)" >&2
+  local wt
+  PR_HEAD_BRANCH=$(gh pr view "$1" --json headRefName --jq '.headRefName')
+  while IFS= read -r wt; do
+    [ -n "$wt" ] || continue
+    # safe_rm_worktree refuses (and says why) for the main checkout or paths
+    # outside .claude/worktrees/; that worktree then keeps holding the branch.
+    if ! safe_rm_worktree "$wt"; then
+      WORKTREE_HELD=1
     fi
-    # Full worktree cleanup deferred to release — prune handles the merged branch
+  done < <(_worktree_holding "$PR_HEAD_BRANCH")
+  git worktree prune
+  if [ "$WORKTREE_HELD" -eq 1 ]; then
+    echo "Skipping local branch deletion — worktree holds it (cleanup deferred to release)" >&2
+  elif git show-ref --verify --quiet "refs/heads/${PR_HEAD_BRANCH}"; then
+    git branch -D "$PR_HEAD_BRANCH"
+  fi
+}
+
+# _update_local_branch BRANCH — fast-forward the local BRANCH to origin without
+# switching any checkout: ff-merge inside the worktree that has it checked out,
+# else move the ref with a fetch refspec (git rejects non-fast-forward).
+_update_local_branch() {
+  local branch="$1" holder
+  git fetch origin
+  holder="$(_worktree_holding "$branch")"
+  holder="${holder%%$'\n'*}"
+  if [ -n "$holder" ]; then
+    if ! git -C "$holder" merge --ff-only "origin/${branch}"; then
+      echo "warning: ${branch} in ${holder} did not fast-forward; local ${branch} may be stale" >&2
+    fi
+  elif git show-ref --verify --quiet "refs/heads/${branch}"; then
+    if ! git fetch origin "${branch}:${branch}"; then
+      echo "warning: local ${branch} did not fast-forward; it may be stale" >&2
+    fi
   fi
 }
 
@@ -108,7 +150,23 @@ case "$CMD" in
     done
     [ ${#ARGS[@]} -gt 0 ] || { echo "Error: provide --add or --rm labels" >&2; exit 1; }
     echo "Labels #${ISSUE}: +[${ADD_LABELS[*]+"${ADD_LABELS[*]}"}] -[${RM_LABELS[*]+"${RM_LABELS[*]}"}]" >&2
-    gh issue edit "$ISSUE" "${ARGS[@]}" 2>/dev/null || true
+    gh issue edit "$ISSUE" "${ARGS[@]}"
+    ;;
+
+  label-create)
+    # Upstreamed from exhand.
+    [ $# -ge 1 ] || { echo "Error: label-create requires NAME" >&2; exit 1; }
+    NAME="$1"; shift
+    ARGS=()
+    while [[ $# -gt 0 ]]; do
+      case $1 in
+        --color) ARGS+=(--color "$2"); shift 2 ;;
+        --description) ARGS+=(--description "$2"); shift 2 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+      esac
+    done
+    echo "Creating label ${NAME}" >&2
+    gh label create "$NAME" "${ARGS[@]+"${ARGS[@]}"}"
     ;;
 
   close)
@@ -171,13 +229,15 @@ case "$CMD" in
     ;;
 
   version)
+    # Outside a checkout there is no hash; "unknown" is the honest answer.
     CODE_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
     # Optional app-version probe (project-specific). Set GH_OPS_APP_PORT to enable.
-    PORT="${GH_OPS_APP_PORT:-${MOBISSH_PORT:-}}"
+    PORT="${GH_OPS_APP_PORT:-}"
     if [ -n "$PORT" ]; then
+      # A down server is a normal answer here, reported as such.
       SERVER_META=$(curl -sf --max-time 3 "http://localhost:${PORT}/" 2>/dev/null \
-        | grep -oP 'app-version"\s*content="\K[^"]+' || echo "server not running")
-      echo "Code: ${CODE_HASH} | Server: ${SERVER_META}"
+        | sed -n 's/.*app-version"[[:space:]]*content="\([^"]*\)".*/\1/p') || SERVER_META=""
+      echo "Code: ${CODE_HASH} | Server: ${SERVER_META:-server not running}"
     else
       echo "Code: ${CODE_HASH}"
     fi
@@ -226,28 +286,46 @@ case "$CMD" in
     done
     echo "Merging PR #${PR_NUM} (${STRATEGY#--})" >&2
     _cleanup_pr_worktree "$PR_NUM"
-    gh pr merge "$PR_NUM" "$STRATEGY" --delete-branch
+    if [ "$WORKTREE_HELD" -eq 0 ]; then
+      gh pr merge "$PR_NUM" "$STRATEGY" --delete-branch
+    else
+      # A worktree holds the local branch: merge, then delete only the remote
+      # branch (gh's --delete-branch would also try the local one and fail).
+      gh pr merge "$PR_NUM" "$STRATEGY"
+      gh api -X DELETE "repos/{owner}/{repo}/git/refs/heads/${PR_HEAD_BRANCH}"
+    fi
     ;;
 
   pr-edit)
-    # Update a PR's body (and/or title): pr-edit PR_NUM --body-file FILE [--title T]
+    # Update a PR's title and/or body (--body from opsurface's copy).
     [ $# -ge 1 ] || { echo "Error: pr-edit requires PR number" >&2; exit 1; }
     PR_NUM="$1"; shift
+    BODY=""
     BODY_FILE=""
     TITLE=""
     while [[ $# -gt 0 ]]; do
       case $1 in
+        --body) BODY="$2"; shift 2 ;;
         --body-file) BODY_FILE="$2"; shift 2 ;;
         --title) TITLE="$2"; shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
       esac
     done
     ARGS=()
-    [ -n "$BODY_FILE" ] && ARGS+=(--body-file "$BODY_FILE")
-    [ -n "$TITLE" ] && ARGS+=(--title "$TITLE")
-    [ ${#ARGS[@]} -ge 1 ] || { echo "Error: pr-edit needs --body-file and/or --title" >&2; exit 1; }
+    if [ -n "$BODY_FILE" ]; then ARGS+=(--body-file "$BODY_FILE"); fi
+    if [ -n "$BODY" ]; then ARGS+=(--body "$BODY"); fi
+    if [ -n "$TITLE" ]; then ARGS+=(--title "$TITLE"); fi
+    [ ${#ARGS[@]} -ge 1 ] || { echo "Error: pr-edit needs --title, --body or --body-file" >&2; exit 1; }
     echo "Editing PR #${PR_NUM}" >&2
     gh pr edit "$PR_NUM" "${ARGS[@]}"
+    ;;
+
+  pr-view)
+    # Read-only PR state (mergeability, checks, refs). Its own command so the
+    # no-raw-gh rule does not push callers to `gh pr view` for a plain read.
+    [ $# -ge 1 ] || { echo "Error: pr-view requires PR number" >&2; exit 1; }
+    PR_NUM="$1"; shift
+    gh pr view "$PR_NUM" "$@"
     ;;
 
   pr-close)
@@ -269,7 +347,8 @@ case "$CMD" in
     ;;
 
   integrate)
-    # Full post-gate workflow: merge PR, close issue, pull main, prune refs
+    # Full post-gate workflow: merge PR, close issue, update local base, prune refs.
+    # Never switches the caller's checkout.
     [ $# -ge 2 ] || { echo "Error: integrate requires PR_NUM ISSUE_NUM" >&2; exit 1; }
     PR_NUM="$1"; shift
     ISSUE_NUM="$1"; shift
@@ -283,66 +362,51 @@ case "$CMD" in
       esac
     done
 
-    # Step 0a (#589): integration-sensitive changes (session state machine /
-    # connect / reconnect / SFTP / IPC) MUST be gated by the on-emulator
-    # integration suite — the fast gate EXCLUDES it, so these ship green-but-
-    # broken (the #539/#546/#547 class). Refuse the merge unless the suite was
-    # actually run (--integration-verified). UI-only/docs/test PRs pass through.
-    # Optional project-specific integration gate: only enforced when the project
-    # provides scripts/integration-required.sh (e.g. mobissh). Generic projects skip it.
-    INTEG_REQ="${SELF_DIR}/integration-required.sh"
-    if [ "$INTEGRATION_VERIFIED" -ne 1 ] && [ -x "$INTEG_REQ" ]; then
-      if gh pr view "$PR_NUM" --json files --jq '.files[].path' 2>/dev/null \
-           | "$INTEG_REQ" --stdin; then
-        echo "BLOCKED: PR #${PR_NUM} changes integration-sensitive code" >&2
-        echo "  (session/connect/reconnect/SFTP/IPC). The fast gate does NOT cover it." >&2
-        echo "  Run the on-emulator suite, then re-integrate with the verified flag:" >&2
-        echo "    scripts/native-fast-gate.sh --with-integration" >&2
+    # Step 0a: optional project-specific integration gate. When the PROJECT
+    # (not devloop) provides scripts/integration-required.sh and it says the
+    # PR's files need the slow integration suite, refuse unless the caller ran
+    # it (--integration-verified). Generic projects skip this.
+    INTEG_REQ="${WORKTREE_ROOT}/scripts/integration-required.sh"
+    if [ "$INTEGRATION_VERIFIED" -ne 1 ] && [ -n "$WORKTREE_ROOT" ] && [ -x "$INTEG_REQ" ]; then
+      PR_FILES=$(gh pr view "$PR_NUM" --json files --jq '.files[].path')
+      if printf '%s\n' "$PR_FILES" | "$INTEG_REQ" --stdin; then
+        echo "BLOCKED: PR #${PR_NUM} changes integration-sensitive code; the fast gate does not cover it." >&2
+        echo "  Run the project's integration suite, then re-integrate with the verified flag:" >&2
         echo "    scripts/gh-ops.sh integrate ${PR_NUM} ${ISSUE_NUM} --integration-verified" >&2
         exit 1
       fi
     fi
 
-    # Step 0: Ensure PR branch is up-to-date with main before merging.
-    # Uses a temporary local branch to avoid conflicting with worktrees
-    # that may still hold the PR branch (#235).
-    echo "==> Checking PR #${PR_NUM} is up-to-date with main" >&2
-    PR_BRANCH=$(gh pr view "$PR_NUM" --json headRefName --jq '.headRefName' 2>/dev/null || true)
-    if [ -n "$PR_BRANCH" ]; then
-      git fetch origin main "$PR_BRANCH" 2>/dev/null || true
-      BEHIND=$(git rev-list --count "origin/${PR_BRANCH}..origin/main" 2>/dev/null || echo "0")
-      if [ "$BEHIND" -gt 0 ]; then
-        echo "==> Branch is ${BEHIND} commit(s) behind main — merging main into PR branch" >&2
-        # Use a temp branch to avoid conflicts with worktrees holding PR_BRANCH
-        TEMP_BRANCH="_integrate-merge-${PR_NUM}"
-        git branch -D "$TEMP_BRANCH" 2>/dev/null || true
-        git checkout -b "$TEMP_BRANCH" "origin/${PR_BRANCH}"
-        if ! git merge origin/main --no-edit 2>/dev/null; then
-          echo "Error: merge of main into ${PR_BRANCH} failed — resolve conflicts first" >&2
-          git checkout main 2>/dev/null || true
-          git branch -D "$TEMP_BRANCH" 2>/dev/null || true
-          exit 1
-        fi
-        git push origin "${TEMP_BRANCH}:${PR_BRANCH}" 2>/dev/null
-        git checkout main 2>/dev/null || true
-        git branch -D "$TEMP_BRANCH" 2>/dev/null || true
-      else
-        echo "==> Branch is up-to-date with main" >&2
+    # Step 0: bring the PR branch up to date with its base. Server-side
+    # (compare API + `gh pr update-branch`), so no local checkout is touched and
+    # there is nothing to restore on failure. Rejected: a temp local branch via
+    # `git checkout -b`, which switched the caller's live worktree.
+    BASE=$(gh pr view "$PR_NUM" --json baseRefName --jq '.baseRefName')
+    HEAD_SHA=$(gh pr view "$PR_NUM" --json headRefOid --jq '.headRefOid')
+    echo "==> Checking PR #${PR_NUM} is up-to-date with ${BASE}" >&2
+    BEHIND=$(gh api "repos/{owner}/{repo}/compare/${BASE}...${HEAD_SHA}" --jq '.behind_by')
+    if [ "$BEHIND" -gt 0 ]; then
+      echo "==> Branch is ${BEHIND} commit(s) behind ${BASE}; updating it on GitHub" >&2
+      if ! gh pr update-branch "$PR_NUM"; then
+        echo "Error: updating PR #${PR_NUM} with ${BASE} failed; resolve conflicts first" >&2
+        exit 1
       fi
+    else
+      echo "==> Branch is up-to-date with ${BASE}" >&2
     fi
 
     # Step 1: Merge PR — worktree cleanup deferred to release (#235).
-    # After the merge-main-into-PR push above, GitHub asynchronously recomputes
+    # After the branch update above, GitHub asynchronously recomputes
     # mergeability (mergeStateStatus → UNKNOWN); a merge attempt in that window
-    # fails "Pull Request is not mergeable" — the transient that needed a manual
-    # retry on nearly every behind-main integrate (#598). Poll mergeStateStatus
-    # and retry with backoff so the transient resolves itself.
+    # fails "Pull Request is not mergeable". Poll mergeStateStatus and retry
+    # with backoff so the transient resolves itself (#598).
     echo "==> Merging PR #${PR_NUM} (${STRATEGY#--})" >&2
     MERGE_OK=0
     MERGE_ERR=""
     for attempt in 1 2 3 4 5 6 7 8; do
+      # A failed status read inside this retry loop is treated like UNKNOWN.
       MERGE_STATE=$(gh pr view "$PR_NUM" --json mergeStateStatus \
-        --jq '.mergeStateStatus' 2>/dev/null || echo "UNKNOWN")
+        --jq '.mergeStateStatus' || echo "UNKNOWN")
       if [ "$MERGE_STATE" = "UNKNOWN" ]; then
         echo "   mergeability still computing (attempt ${attempt}/8) — wait 3s" >&2
         sleep 3
@@ -373,22 +437,29 @@ case "$CMD" in
       exit 1
     fi
 
-    # Step 2: Close issue
-    echo "==> Closing issue #${ISSUE_NUM}" >&2
-    gh issue close "$ISSUE_NUM" --comment "Fixed in PR #${PR_NUM}" 2>/dev/null || true
+    # Step 2: Close issue only when the PR body closes it (Closes/Fixes/
+    # Resolves #N); a "Refs #N" PR must not close an umbrella issue (upstreamed
+    # from mobissh). gh reports an already-closed issue and exits 0.
+    source "$SELF_DIR/lib/pr-closes.sh"
+    PR_BODY=$(gh pr view "$PR_NUM" --json body --jq '.body')
+    if pr_closes_issue "$PR_BODY" "$ISSUE_NUM"; then
+      echo "==> Closing issue #${ISSUE_NUM}" >&2
+      gh issue close "$ISSUE_NUM" --comment "Fixed in PR #${PR_NUM}"
+    else
+      echo "==> Leaving issue #${ISSUE_NUM} open (PR #${PR_NUM} does not say Closes/Fixes #${ISSUE_NUM})" >&2
+    fi
 
-    # Step 3: Remove bot label
-    gh issue edit "$ISSUE_NUM" --remove-label bot 2>/dev/null || true
+    # Step 3: Remove bot label (only if present: issue 0 means no linked issue)
+    if [ "$ISSUE_NUM" != "0" ] && _issue_has_label "$ISSUE_NUM" bot; then
+      gh issue edit "$ISSUE_NUM" --remove-label bot
+    fi
 
-    # Step 4: Pull main and prune (guard CWD first)
-    guard_cwd
-    ensure_repo_root
-    echo "==> Pulling main" >&2
-    git checkout main 2>/dev/null || true
-    if ! git pull --ff-only 2>/dev/null; then echo "warning: ff-only pull failed, local main may be stale" >&2; fi
-    git remote prune origin 2>/dev/null || true
+    # Step 4: update the local base branch without switching any checkout, prune
+    echo "==> Updating local ${BASE}" >&2
+    _update_local_branch "$BASE"
+    git remote prune origin
 
-    echo "+ Integrated: PR #${PR_NUM} -> issue #${ISSUE_NUM} closed" >&2
+    echo "+ Integrated: PR #${PR_NUM} (issue #${ISSUE_NUM})" >&2
     ;;
 
   delegate)
@@ -403,47 +474,52 @@ case "$CMD" in
       esac
     done
 
-    # Apply bot label (swap from divergence if present)
+    # Apply bot label (swap from divergence if present; gh errors on removing
+    # a label the repo does not define, so only remove what the issue has)
     echo "==> Labeling issue #${ISSUE_NUM}" >&2
-    LABEL_ARGS=(--add-label bot --remove-label divergence)
+    LABEL_ARGS=(--add-label bot)
+    if _issue_has_label "$ISSUE_NUM" divergence; then
+      LABEL_ARGS+=(--remove-label divergence)
+    fi
     for l in "${EXTRA_LABELS[@]+"${EXTRA_LABELS[@]}"}"; do
       LABEL_ARGS+=(--add-label "$l")
     done
-    gh issue edit "$ISSUE_NUM" "${LABEL_ARGS[@]}" 2>/dev/null || true
+    gh issue edit "$ISSUE_NUM" "${LABEL_ARGS[@]}"
 
     # Audit trail comment
     echo "==> Adding audit comment" >&2
     gh issue comment "$ISSUE_NUM" --body "Delegated to local develop agent. Branch: bot/issue-${ISSUE_NUM}"
 
     # Clean stale refs
-    git remote prune origin 2>/dev/null || true
+    git remote prune origin
 
     echo "+ Delegated: issue #${ISSUE_NUM} (bot label applied)" >&2
     ;;
 
   fetch-issues)
-    # Fetch issue titles and bodies to a single readable file
+    # Print issue titles and bodies to stdout, or to --out FILE. No shared
+    # default path: concurrent agents clobbered the old fixed /tmp file.
     [ $# -ge 1 ] || { echo "Error: fetch-issues requires comma-separated issue numbers" >&2; exit 1; }
     ISSUE_NUMS="$1"; shift
-    GH_OPS_TMPDIR="${GH_OPS_TMPDIR:-${MOBISSH_TMPDIR:-/tmp/gh-ops}}"
-    mkdir -p "$GH_OPS_TMPDIR"
-    OUT="${GH_OPS_TMPDIR}/fetched-issues.md"
+    OUT=""
     while [[ $# -gt 0 ]]; do
       case $1 in
         --out) OUT="$2"; shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
       esac
     done
-    : > "$OUT"
+    if [ -n "$OUT" ]; then
+      exec > "$OUT"
+    fi
     IFS=',' read -ra NUMS <<< "$ISSUE_NUMS"
     for n in "${NUMS[@]}"; do
       n="${n// /}"
       echo "Fetching #${n}" >&2
-      echo "## Issue #${n}" >> "$OUT"
-      gh issue view "$n" --json title,body,labels --jq '"**\(.title)**\n\nLabels: \([.labels[].name] | join(", "))\n\n\(.body // "(no body)")"' >> "$OUT"
-      echo -e "\n---\n" >> "$OUT"
+      echo "## Issue #${n}"
+      gh issue view "$n" --json title,body,labels --jq '"**\(.title)**\n\nLabels: \([.labels[].name] | join(", "))\n\n\(.body // "(no body)")"'
+      echo
     done
-    echo "Wrote ${#NUMS[@]} issues to ${OUT}" >&2
+    echo "Fetched ${#NUMS[@]} issue(s)${OUT:+ to ${OUT}}" >&2
     ;;
 
   release)
@@ -470,7 +546,7 @@ case "$CMD" in
     else
       REL_ARGS+=(--generate-notes)
     fi
-    [ -n "$TARGET" ] && REL_ARGS+=(--target "$TARGET")
+    if [ -n "$TARGET" ]; then REL_ARGS+=(--target "$TARGET"); fi
     echo "Creating release ${TAG} (${TITLE})" >&2
     gh release create "${REL_ARGS[@]}" "${ASSETS[@]+"${ASSETS[@]}"}"
     ;;

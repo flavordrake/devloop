@@ -1,5 +1,7 @@
 # Crystallize: Design Overview
 
+**Status: proposal.** Not built: `crystallize-audit.sh` and the scripts in the examples below do not exist yet.
+
 ## The Problem
 
 An LLM-driven development workflow accumulates skill documents — recipes

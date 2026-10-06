@@ -58,6 +58,9 @@ run
 expect_rc "no-args-usage" 1
 run bogus
 expect_rc "unknown-command" 1
+run --help
+expect_rc "help-rc" 0
+case "$OUT" in *"label-create NAME"*"release TAG"*) pass "help-lists-subcommands" ;; *) fail "help-lists-subcommands: $OUT" ;; esac
 
 run labels 5 --add a --rm b
 expect_rc "labels-rc" 0

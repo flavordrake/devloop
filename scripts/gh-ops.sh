@@ -46,6 +46,10 @@ usage() {
 }
 
 [ $# -ge 1 ] || usage
+case "$1" in
+  # Full subcommand list from the header comment, to stdout, exit 0.
+  -h|--help|help) sed -n '/^# Subcommands:/,/^#$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
 
 CMD="$1"; shift
 

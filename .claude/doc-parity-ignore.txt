@@ -1,0 +1,31 @@
+# Optional repo-provided scripts: live in consuming repos, not devloop; listed in
+# rules/gates.md "Optional repo-provided scripts" (#11, 2026-10-06).
+scripts/gate.sh
+scripts/e2e.sh
+scripts/with-modal.sh
+scripts/link-devloop-rules.sh
+*delegate-discover.sh
+*delegate-classify.sh
+*delegate-failure-analysis.sh
+*delegate-fetch-bodies.sh
+scripts/develop-propose.sh
+scripts/integrate-discover.sh
+scripts/integrate-cleanup.sh
+
+# Consuming-repo .claude/ paths that skills read or write there (rules link
+# target, project rules, settings, hooks); devloop has none of them.
+path:.claude/rules/devloop/
+path:.claude/rules/security.md
+path:.claude/settings.json
+path:.claude/hooks/
+
+# docs/crystallize.md is a design proposal; these are not built (#11, 2026-10-06).
+crystallize-audit.sh
+scripts/count-bot-attempts.sh
+path:.claude/tool-registry.md
+
+# skills/doc-parity/SKILL.md documents the default records/research dirs and a
+# sibling-path example; none exist in devloop itself.
+path:docs/reviews/
+path:docs/research/
+path:docs/x.md

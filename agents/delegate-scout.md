@@ -16,6 +16,14 @@ Create a per-run directory first: `OUT=$(mktemp -d)`. Then run in order:
 3. For each `already-attempted` issue: `scripts/delegate-failure-analysis.sh <issue-number>`.
 4. `scripts/delegate-fetch-bodies.sh --data "$OUT/classified.json"`.
 
+These scripts are optional and repo-provided (`rules/gates.md`). When one is absent,
+gather the same data with devloop's `${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh` (`$GHO` below) and classify yourself:
+
+1. Open issues: `$GHO search "sort:created-desc" 200 > "$OUT/data.json"`; bot branches: `git ls-remote --heads origin 'bot/issue-*'`.
+2. Classify each issue by its labels, body (`$GHO fetch-issues N1,N2 --out "$OUT/bodies.md"`) and branches: a `bot/issue-N` branch or `divergence` label is already-attempted; over the `rules/decomposition.md` thresholds is decompose; needs credentials, devices or owner choices is human-only; depends on an open issue is blocked; else delegate. Write `$OUT/classified.json`.
+3. Failure analysis: `$GHO comments N` and the branch's PR (`$GHO pr-view bot/issue-N --json state,title,comments`; gh accepts a branch name); summarize why it failed.
+4. Bodies: step 2's `$OUT/bodies.md`.
+
 If a script fails, report its exit code and stderr and continue with what completed. Do not retry.
 
 Return:

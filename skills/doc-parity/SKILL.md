@@ -34,9 +34,9 @@ Options: `--warn|--block` (default block), `--kinds k1,k2`, `--root DIR`, `--con
 Docs to code (`MISSING <kind> <value> <doc>:<line> (+N more)`):
 
 - `path`: a repo path under a top-level directory (file with extension, or `dir/`) exists. A path relative to the naming doc's directory also resolves.
-- `script`: a bare `name.sh|.bash|.py|.mjs` matches some file name.
+- `script`: a bare `<name>.sh|.bash|.py|.mjs` matches some file name.
 - `env`: a word with the project env prefix appears in code.
-- `cli`: `` `tool.sh <sub>` `` (backticks or code fence) is a subcommand the script dispatches.
+- `cli`: `` `<tool>.sh <sub>` `` (backticks or code fence) is a subcommand the script dispatches.
 - `route`: `GET|POST|PUT|DELETE|PATCH /x/y` has its static part in code.
 
 Code to docs (`UNDOCUMENTED <kind> <value> <code>:<line>`):

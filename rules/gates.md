@@ -28,6 +28,20 @@ command, ideally a repo script.
 - Infra needs: emulator lease (`scripts/with-fleet-emulator.sh`), Modal GPU
   (`scripts/with-modal.sh`), mac-build, docker fixtures, CI-as-gate
 
+## Optional repo-provided scripts
+
+Skills call these in the consuming repo when present and fall back (devloop's
+`scripts/gh-ops.sh`, or the gate fallback above) when absent. devloop does not
+ship them for consumers (its own `scripts/fast-gate.sh` gates devloop only); its
+doc-parity ignore file waives them.
+
+- Gates: `scripts/fast-gate.sh`, `scripts/gate.sh`, `scripts/e2e.sh`, `scripts/with-modal.sh`
+- Setup: `scripts/link-devloop-rules.sh`
+- Delegate: `scripts/delegate-discover.sh`, `scripts/delegate-classify.sh`,
+  `scripts/delegate-failure-analysis.sh`, `scripts/delegate-fetch-bodies.sh`
+- Develop: `scripts/develop-propose.sh`
+- Integrate: `scripts/integrate-discover.sh`, `scripts/integrate-cleanup.sh`
+
 ## Example `.claude/process.md`
 
 ```markdown

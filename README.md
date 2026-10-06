@@ -83,3 +83,5 @@ hooks/            hook scripts
 scripts/          gh-ops, gh-file-issue, trace utils, validate-plugin
 rules/            rules for linking into repos (platform/ is path-scoped)
 ```
+
+Every script, subcommand and env var: [docs/scripts.md](docs/scripts.md).

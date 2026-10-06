@@ -2,12 +2,12 @@
 # scripts/gh-file-issue.sh — File a GitHub issue with body from file/stdin
 #
 # Wraps gh issue create with proper output handling so Claude Code can
-# approve a single `bash scripts/gh-file-issue.sh` call instead of
+# approve a single `scripts/gh-file-issue.sh` call instead of
 # approving compound heredoc + redirection patterns individually.
 #
 # Usage:
-#   bash scripts/gh-file-issue.sh --title "bug: title" --label bug [--label ux] --body-file /tmp/body.md
-#   echo "body text" | bash scripts/gh-file-issue.sh --title "feat: title" --label feature
+#   scripts/gh-file-issue.sh --title "bug: title" --label bug [--label ux] --body-file /tmp/body.md
+#   echo "body text" | scripts/gh-file-issue.sh --title "feat: title" --label feature
 #
 # Options:
 #   --title TEXT        Issue title (required)
@@ -56,7 +56,7 @@ fi
 
 # Build label args
 LABEL_ARGS=()
-for label in "${LABELS[@]}"; do
+for label in "${LABELS[@]+"${LABELS[@]}"}"; do
   LABEL_ARGS+=(--label "$label")
 done
 
@@ -68,4 +68,4 @@ fi
 echo "Filing: $TITLE" >&2
 
 # Create the issue — gh outputs the URL to stdout
-gh issue create --title "$TITLE" "${LABEL_ARGS[@]}" --body "$BODY"
+gh issue create --title "$TITLE" "${LABEL_ARGS[@]+"${LABEL_ARGS[@]}"}" --body "$BODY"

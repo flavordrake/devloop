@@ -30,7 +30,6 @@ are what persist.
 | `scripts/trace-init.sh <slug>` | Create a trace and mark it active |
 | `scripts/trace-checkpoint.sh [label]` | One-line status; silent if no active trace |
 | `scripts/trace-check.sh [trace-dir]` | Full health report: staleness, commits, empty sections, pivots |
-| `scripts/trace-attach.sh <trace-dir> <url>` | Download a file into `artifacts/` |
 
 **Close** a trace by setting `status: success` or `status: failure` in the
 TRACE.md frontmatter (hooks go quiet), or remove the Active TRACE line.

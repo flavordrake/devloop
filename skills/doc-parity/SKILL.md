@@ -135,5 +135,6 @@ Then re-run layer 1: new doc lines are new claims. Repeat until both directions 
 - A script's own usage line is not a call; a mention of a non-existent path in code is a comment, not a call.
 - Stale code comments naming deleted files slip past layer 1; layer 2 catches them.
 - Exclude test-only env vars (tests are skipped for `env`); a CI or OS variable is not a project knob.
+- Local runs also scan untracked, non-ignored files, so local counts can exceed CI. Without an `env-prefix`, getenv heuristics flag every knob; set the prefix before triaging a large `env` count.
 - Test fixtures that create scratch git repos MUST `unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE` first: under a git hook they otherwise write into the caller's repo (one flipped `core.bare` on a shared repo).
 - Paths only is not parity: the costly misses (an unbuilt feature, a privacy promise living in served HTML, a self-update claim false for one install channel) are semantic.

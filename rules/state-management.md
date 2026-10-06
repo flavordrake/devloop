@@ -1,3 +1,7 @@
+---
+paths:
+  - "**/*.{ts,tsx,js,jsx,mjs,dart,kt,java,swift,py,rs,go,c,cc,cpp,h,hpp}"
+---
 # State Management
 
 ## Don't infer state from boolean combinations

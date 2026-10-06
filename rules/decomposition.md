@@ -18,6 +18,8 @@ Each part merges to main before the next starts. This ensures:
 
 ## When to decompose
 
+These are the canonical size thresholds; skills and agents refer here.
+
 - >200 lines of change → decompose
 - >5 files → decompose
 - Shared state migration → always decompose (A: new, B: migrate, C: verify)

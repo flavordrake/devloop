@@ -70,7 +70,15 @@ Plugins can't ship rules, so repos link them (see below). Every session loads th
 1. Write `AGENTS.md` at the repo root with a `## Gates` section mapping `fast`, `full`, `device`, and `ship` to commands or scripts (see the `gates` rule), and optionally a `## Project` section (default branch, version file, issue tracker `github` or `local:<path>`, domain labels, infra needs). Codex, opencode and pi read `AGENTS.md`; Claude Code reads `CLAUDE.md`, so add the line `@AGENTS.md` to it. Without gates, devloop falls back to `scripts/fast-gate.sh`, then `scripts/gate.sh`.
 2. Link the rules: an idempotent `scripts/link-devloop-rules.sh` that symlinks each devloop `rules/*.md` into `.claude/rules/devloop/` (devloop path overridable by `DEVLOOP_ROOT`). Re-run it when devloop adds rules.
 3. Call devloop scripts through the plugin, never copy or shim them. In skills and hooks: `${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh`. From a shell or repo script, resolve the installed version: `"$("$HOME/.claude/plugins/marketplaces/flavordrake/scripts/devloop-path.sh")/scripts/gh-ops.sh"` (the marketplace clone is the version-free bootstrap; `scripts/devloop-path.sh` returns the newest cached install). Upstream missing subcommands instead of forking.
-4. Run `/doc-parity` before every release. Release is blocked while code and docs drift.
+4. In CI (no plugin installed), pin devloop with the setup action, which exports `DEVLOOP_ROOT`:
+
+   ```yaml
+   - uses: flavordrake/devloop/.github/actions/setup@v0.4.4
+   - run: '"$DEVLOOP_ROOT/skills/doc-parity/scripts/doc-parity.sh" --block'
+   ```
+
+   Then delete the repo's vendored copies of devloop scripts and their tests; devloop tests them.
+5. Run `/doc-parity` before every release. Release is blocked while code and docs drift.
 
 ## Structure
 

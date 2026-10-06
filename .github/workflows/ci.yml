@@ -1,0 +1,26 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  fast-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # scripts/validate-plugin.sh calls `claude plugin validate`.
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: scripts/fast-gate.sh
+  setup-action:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # "" copies the action's own checkout; a sha exercises the fetch path.
+        ref: ["", "${{ github.event.pull_request.head.sha || github.sha }}"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          ref: ${{ matrix.ref }}
+      - run: '"$DEVLOOP_ROOT/scripts/gh-ops.sh" --help'
+      - run: '"$DEVLOOP_ROOT/skills/doc-parity/scripts/doc-parity.sh" --block'

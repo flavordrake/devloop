@@ -4,7 +4,9 @@
 #   called  a path the system calls: named by .claude/settings.json, hooks.json,
 #           hooks/, .claude/hooks/, .githooks/, .github/workflows/, package.json,
 #           Makefile, justfile, or any shell script (a script's own usage line
-#           is not a call; a mention of a path that does not exist is dropped)
+#           is not a call; a mention of a path that does not exist is dropped),
+#           or by an ExecStart= or `curl ... | sh` line in any code file; a
+#           sibling repo's path (~/workspace/other/..., ../other/...) is not
 #   file    every file matching the `code` globs (default *.sh)
 #   env     with env-prefix: every prefixed word in non-test code; without:
 #           variables read via getenv-style calls (sh ${X:-}, os.environ,
@@ -19,7 +21,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 source "$HERE/lib.sh"
 rc=0; dp_args "$@" || rc=$?
-if [[ "$rc" -eq 3 ]]; then sed -n '2,17p' "$0"; exit 0; fi
+if [[ "$rc" -eq 3 ]]; then sed -n '2,18p' "$0"; exit 0; fi
 if [[ "$rc" -ne 0 ]]; then exit "$rc"; fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/doc-parity-c2d.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -34,15 +36,30 @@ surfaces() {
   awk -v t="$TEST_RE" '
     $0 ~ /^(\.claude\/settings\.json|hooks\.json|package\.json|Makefile|justfile)$/ ||
     $0 ~ /^(hooks|\.claude\/hooks|\.githooks|\.github\/workflows)\// || $0 ~ /\.(sh|bash)$/' "$WORK/code" > "$WORK/callers"
-  if [[ -s "$WORK/callers" ]]; then
-    tr '\n' '\0' < "$WORK/callers" | xargs -0 awk -v filelist="$WORK/files" '
-      BEGIN { while ((getline l < filelist) > 0) f[l] = 1 }
-      FNR == 1 { dir = FILENAME; if (!sub(/\/[^\/]*$/, "", dir)) dir = "" }
+  # Any other code file calls only from a systemd ExecStart= line or a
+  # `curl ... | sh` one-liner.
+  if [[ -s "$WORK/code" ]]; then
+    tr '\n' '\0' < "$WORK/code" | xargs -0 awk -v filelist="$WORK/files" -v callerlist="$WORK/callers" '
+      BEGIN { while ((getline l < filelist) > 0) f[l] = 1; while ((getline l < callerlist) > 0) caller[l] = 1 }
+      FNR == 1 { dir = FILENAME; if (!sub(/\/[^\/]*$/, "", dir)) dir = ""; whole = (FILENAME in caller) }
+      !whole && $0 !~ /ExecStart(Pre|Post)?=|curl[^|]*\|[[:space:]]*(sudo[[:space:]]+)?(ba|z|da)?sh([^A-Za-z]|$)/ { next }
       {
         rest = $0
         while (match(rest, /[A-Za-z0-9_.\/-]*[A-Za-z0-9_-]\.(sh|bash|py|mjs|dart|rb|pl)/)) {
+          pre = RSTART > 1 ? substr(rest, RSTART - 1, 1) : ""
           tok = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
           if (rest ~ /^[A-Za-z0-9_]/) continue
+          # A sibling repo (~/workspace/other/..., ../other/...) is not a call
+          # into this one: ~ is skipped; a leading ../ resolves from the calling
+          # file and is dropped when it leaves the repo.
+          if (pre == "~") continue
+          if (substr(tok, 1, 3) == "../" && pre != "/") {
+            p = dir; c = tok; out = 0
+            while (substr(c, 1, 3) == "../") { if (p == "") { out = 1; break }; if (!sub(/\/[^\/]*$/, "", p)) p = ""; c = substr(c, 4) }
+            if (p != "") c = p "/" c
+            if (!out && (c in f) && c != FILENAME) print "called\t" c "\t" FILENAME ":" FNR
+            continue
+          }
           hit = ""
           for (c = tok; c != ""; ) {
             sub(/^\.\//, "", c)
@@ -104,7 +121,10 @@ awk -F'\t' -v kinds="$KINDS" -v countfile="$WORK/checked" "$DP_AWK_GLOB"'
   FILENAME == ARGV[1] {
     rest = $0
     while (match(rest, /[A-Za-z0-9_.\/-]+/)) {
-      t = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
+      t = substr(rest, RSTART, RLENGTH); sib = (substr(rest, RSTART - 1, 1) == "~" || t ~ /^\.\.\//)
+      rest = substr(rest, RSTART + RLENGTH)
+      # ~/workspace/other/x.sh or ../other/x.sh names a sibling repo file.
+      if (sib) continue
       sub(/^\.\//, "", t); sub(/[.,:]+$/, "", t); tok[t] = 1; b = t; sub(/.*\//, "", b); if (b != "") base[b] = 1
       # `src/` in `src/*.py` or `src/<name>` is a pattern, not a directory claim.
       if (t ~ /\/$/ && rest !~ /^[*<{]/) dirtok[t] = 1

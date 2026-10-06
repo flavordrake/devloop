@@ -28,8 +28,9 @@ crystallize-audit.sh
 scripts/count-bot-attempts.sh
 path:.claude/tool-registry.md
 
-# skills/doc-parity/SKILL.md documents the default records/research dirs and a
-# sibling-path example; none exist in devloop itself.
+# skills/doc-parity/SKILL.md documents the default records/research dirs and
+# sibling-path and directory-claim examples; none exist in devloop itself.
 path:docs/reviews/
 path:docs/research/
 path:docs/x.md
+path:docs/specs/

@@ -1,0 +1,31 @@
+name: devloop setup
+description: Make devloop's scripts available at a pinned version and export DEVLOOP_ROOT, for CI runners with no devloop plugin.
+inputs:
+  ref:
+    description: devloop tag, branch or commit to use. Default is the ref this action was called at (the @tag in `uses:`).
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        REF: ${{ inputs.ref }}
+        ACTION_PATH: ${{ github.action_path }}
+        REPO_URL: ${{ github.server_url }}/${{ github.action_repository || 'flavordrake/devloop' }}
+      run: |
+        set -euo pipefail
+        root="$RUNNER_TEMP/devloop"
+        rm -rf "$root"
+        if [[ -z "$REF" ]]; then
+          # The runner already fetched this repo at the action's own ref; copy it
+          # (rejected: re-cloning by github.action_ref, which is empty in some
+          # composite contexts and costs a network round trip).
+          cp -R "$ACTION_PATH/../../.." "$root"
+        else
+          git init -q "$root"
+          git -C "$root" fetch -q --depth 1 "$REPO_URL" "$REF"
+          git -C "$root" checkout -q FETCH_HEAD
+        fi
+        echo "DEVLOOP_ROOT=$root" >> "$GITHUB_ENV"
+        echo "devloop ${REF:-at the action ref} in $root"

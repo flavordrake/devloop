@@ -42,8 +42,9 @@ devloop's shipped scripts. Call them through the plugin (`${CLAUDE_PLUGIN_ROOT}/
 ## Plugin
 
 - `scripts/devloop-path.sh`: print the newest installed devloop root for shell callers that have no `${CLAUDE_PLUGIN_ROOT}`. `DEVLOOP_ROOT` overrides; `CLAUDE_CONFIG_DIR` (default `~/.claude`) locates the plugin cache; with no cache it prints its own checkout.
+- `.github/actions/setup/action.yml`: for CI with no plugin. `uses: flavordrake/devloop/.github/actions/setup@<tag>` puts devloop at that tag in `$RUNNER_TEMP/devloop` and exports `DEVLOOP_ROOT`; call `"$DEVLOOP_ROOT/scripts/<name>"`. Input `ref` picks another tag, branch or commit. Local shells use `devloop-path.sh`, which honors the same `DEVLOOP_ROOT`.
 - `scripts/validate-plugin.sh`: `claude plugin validate` plus skill frontmatter checks.
-- `scripts/fast-gate.sh`: devloop's own fast gate (validate-plugin, `scripts/test/`, doc parity warning).
+- `scripts/fast-gate.sh`: devloop's own fast gate (validate-plugin, `scripts/test/`, doc parity warning); `.github/workflows/ci.yml` runs it on push and PR, and runs `gh-ops.sh --help` and doc parity through the setup action.
 
 ## Libraries (`scripts/lib/`, sourced)
 

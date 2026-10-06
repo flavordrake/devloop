@@ -41,12 +41,14 @@ Docs to code (`MISSING <kind> <value> <doc>:<line> (+N more)`):
 
 Code to docs (`UNDOCUMENTED <kind> <value> <code>:<line>`):
 
-- `called`: a path the system calls (`.claude/settings.json`, `hooks.json`, `hooks/`, `.claude/hooks/`, `.githooks/`, `.github/workflows/`, `package.json`, `Makefile`, `justfile`, any shell script) is named in a doc.
+- `called`: a path the system calls (`.claude/settings.json`, `hooks.json`, `hooks/`, `.claude/hooks/`, `.githooks/`, `.github/workflows/`, `package.json`, `Makefile`, `justfile`, any shell script, or an `ExecStart=` or `curl ... | sh` line in any code file) is named in a doc. `dart tools/x.dart` or `python tools/x.py` in a script makes `tools/x.dart` called.
 - `file`: every file matching the `code` globs is named in a doc.
 - `env`: prefixed words in non-test code, or (no prefix) getenv-style reads: sh `${X:-}` (not self-assigned), `os.environ`, `process.env`, `Platform.environment`/`fromEnvironment`, `System.getenv`, `env::var`, `os.Getenv`, `getenv`. OS, CI and toolchain variables (`HOME`, `PATH`, `CI`, `JAVA_HOME`, `ANDROID_HOME`, `NODE_ENV`, `GITHUB_*`, `CARGO_*`, ...) are never surfaces.
 - `cli`: subcommands found by cheap heuristics: top-level sh `case "$1"|"$cmd"...` arms, argparse `add_parser`, click/commander `command(`, Dart `addCommand`, clikt `name =`.
 
-A file counts as documented by its full path, its file name, or a directory token above it (`scripts/test/` covers everything under it, which keeps waivers small).
+A file counts as documented by its full path, its file name, or a directory token above it (`scripts/test/`, `tools/`, `docs/specs/` cover everything under them, which keeps waivers small).
+
+Sibling repos: `~/workspace/<repo>/...` and `../<repo>/...` are never claims, calls or documentation of this repo; `siblings` covers prose like `mobissh docs/x.md`.
 
 `UNJUSTIFIED waiver <entry> <file>:<line>` means an ignore entry has no comment above it.
 
@@ -70,6 +72,15 @@ In `AGENTS.md` at the repo root (legacy fallback: `.claude/process.md` when `AGE
 Defaults: no env prefix (getenv heuristics), `code: *.sh`, `records: docs/reviews/`, `research: docs/research/`, `ignore: .claude/doc-parity-ignore.txt`. Docs are every tracked `*.md` except records, changelogs/release notes, fixtures and `.claude/` internals (only `.claude/{rules,agents,skills}/` and legacy `.claude/process.md` count). Research docs make path and script claims only. `siblings` names other projects whose paths docs quote (`mobissh docs/x.md`). `user-text` lists user-facing text shipped in code for layer 2.
 
 Ignore file: `kind:glob` (or a bare glob for any kind), one per line, a comment above each entry or block saying why (planned in #N with a date, a foreign path, an internal helper no reader needs). Remove an entry when its item lands.
+
+### Migrating a repo doc-drift script
+
+A repo-local two-way check (e.g. opsurface's doc-drift script) maps on directly:
+
+- CALLED-BUT-UNDOCUMENTED is `UNDOCUMENTED called|file`; DOCUMENTED-BUT-MISSING is `MISSING path|script`.
+- Hard-coded entrypoints (installer scripts, `tools/<x>/bin/*.dart`) become `code` globs.
+- A lookbehind for a sibling repo name becomes `siblings`.
+- The ignore file keeps its format: bare globs (`*` crosses `/`) waive any kind, a comment above each entry or block. Point `ignore:` at the old file, or move it; prefix `path:` to waive one direction only. Bash `[...]` classes are not supported. Entries the sibling rules now cover can go.
 
 ## Layer 2: semantic audit
 
@@ -110,6 +121,7 @@ Then re-run layer 1: new doc lines are new claims. Repeat until both directions 
 
 ## Gate wiring
 
+- CI (no plugin installed): `uses: flavordrake/devloop/.github/actions/setup@<tag>`, then `"$DEVLOOP_ROOT/skills/doc-parity/scripts/doc-parity.sh" --block`.
 - Fast gate: `doc-parity.sh --warn` (or `--block --kinds path,script,called` once a repo is clean).
 - Ship / release: `doc-parity.sh --block`, then layer 2 before the tag.
 - Repo-specific checks stay in the repo (e.g. a coverage-map check that every spec has a coverage row).

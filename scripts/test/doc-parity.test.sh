@@ -128,6 +128,11 @@ expect_clean "a justified waiver suppresses the claim" "$R" docs-to-code.sh
 printf '\nscripts/other.sh\n' >> "$R/.claude/doc-parity-ignore.txt"
 expect_find "an unjustified waiver is a finding" "$R" docs-to-code.sh '^UNJUSTIFIED waiver scripts/other\.sh \.claude/doc-parity-ignore\.txt:4$'
 
+# Docs naming devloop's own scripts resolve through the plugin, not a repo copy.
+R="$T/plugin"; make_repo "$R"
+printf 'Use `scripts/gh-ops.sh pr-view`, then `doc-parity.sh --block`.\n' >> "$R/README.md"
+expect_clean "devloop plugin script names are not missing" "$R" docs-to-code.sh
+
 # Modes, and a GIT_DIR inherited from a hook must not redirect the file list.
 R="$T/modes"; make_repo "$R"
 printf 'Run `scripts/ghost.sh`.\n' >> "$R/README.md"

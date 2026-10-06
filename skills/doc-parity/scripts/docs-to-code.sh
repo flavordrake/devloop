@@ -108,6 +108,12 @@ awk -F'\t' '$1 == "route" { print $2 }' "$WORK/claims" | sort -u | while IFS= re
   if [[ -n "$(dp_xgrep "$WORK/code" -lF -- "$r")" ]]; then printf '%s\n' "$r"; fi
 done > "$WORK/routes"
 dp_ignores > "$WORK/ignores"
+# Consumers call devloop scripts through the plugin, not a repo copy, so a doc
+# naming one (scripts/gh-ops.sh, doc-parity.sh) is not a missing file.
+PLUGIN_ROOT="$(cd "$HERE/../../.." && pwd)"
+{ cat "$WORK/files"
+  (cd "$PLUGIN_ROOT" && find scripts skills/*/scripts -type f -name '*.sh' 2>/dev/null) # absent dirs are fine
+} | sort -u > "$WORK/known"
 dp_ignore_check > "$WORK/findings"
 
 # One row per (kind, value): first doc:line and mention count; resolve each.
@@ -147,7 +153,7 @@ awk -F'\t' -v kinds="$KINDS" -v countfile="$WORK/checked" "$DP_AWK_GLOB"'
       print "MISSING " kind " " v " " first[k] more
     }
     print checked + 0 > countfile
-  }' "$WORK/files" "$WORK/words" "$WORK/subs" "$WORK/routes" "$WORK/ignores" "$WORK/claims" > "$WORK/candidates"
+  }' "$WORK/known" "$WORK/words" "$WORK/subs" "$WORK/routes" "$WORK/ignores" "$WORK/claims" > "$WORK/candidates"
 
 # A path that git ignores but exists on disk (a local config) is not missing.
 while IFS= read -r line; do

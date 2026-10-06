@@ -19,7 +19,7 @@ devloop's shipped scripts. Call them through the plugin (`${CLAUDE_PLUGIN_ROOT}/
 | `gh-ops.sh pr-create --head B [--base A] --title T --body-file F [--label L]` | open a PR (`--base` for a stacked PR) |
 | `gh-ops.sh pr-edit PR [--title T] [--body-file F] [--body T]` | edit an open PR |
 | `gh-ops.sh pr-view PR [gh pr view flags]` | read-only PR state |
-| `gh-ops.sh pr-merge PR [--squash\|--merge\|--rebase]` | merge, delete branch |
+| `gh-ops.sh pr-merge PR [--squash\|--merge\|--rebase]` | retarget PRs stacked on it, merge, delete branch (integrate does the same) |
 | `gh-ops.sh pr-close PR [--comment T]` | close a PR |
 | `gh-ops.sh integrate PR ISSUE [--merge\|--squash\|--rebase]` | merge, close the issue if the PR closes it, update local base |
 | `gh-ops.sh delegate ISSUE [--label L]` | label `bot`, audit comment, prune refs |

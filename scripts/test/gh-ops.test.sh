@@ -24,6 +24,7 @@ case "$*" in
   "pr view"*"--json headRefOid"*) echo abc123 ;;
   "pr view"*"--json headRefName"*) echo feature ;;
   "pr view"*"--json mergeStateStatus"*) echo CLEAN ;;
+  "pr list --base feature"*) printf '%s\n' ${GH_STACKED:-} ;;
   "pr view"*"--json body"*) echo "${GH_PR_BODY:-}" ;;
   "api repos/{owner}/{repo}/compare/"*) echo "${GH_BEHIND:-0}" ;;
   "issue view"*"--json labels --jq"*) echo "${GH_HAS_LABEL:-false}" ;;
@@ -144,6 +145,13 @@ for body in "Refs #7" "Closes #70" "prefix#7" "unfixes #7"; do
   if pr_closes_issue "$body" 7; then fail "not-closes: $body"; else pass "not-closes: $body"; fi
 done
 if pr_closes_issue "Closes #0" 0; then fail "issue-0-never"; else pass "issue-0-never"; fi
+
+# pr-merge retargets PRs stacked on the merged branch before deleting it.
+GH_STACKED="41 42" run pr-merge 40
+expect_call "pr-merge retargets stacked PR 41" "pr edit 41 --base main"
+expect_call "pr-merge retargets stacked PR 42" "pr edit 42 --base main"
+run pr-merge 40
+expect_no_call "pr-merge with no stacked PRs edits nothing" "pr edit"
 
 if [ "$FAILS" -gt 0 ]; then
   echo "$FAILS gh-ops test(s) failed"

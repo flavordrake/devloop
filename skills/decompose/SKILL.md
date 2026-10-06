@@ -93,7 +93,7 @@ For each approved sub-issue:
 
 1. Write body to `/tmp/sub-issue-{parent}_{letter}.md` with file scope, acceptance criteria,
    context snippets, and test requirements (the develop agent's brief)
-2. File via (tracker `local:<path>` in process.md: append to the backlog instead): `scripts/gh-file-issue.sh --title "feat: {parent title} — {sub-concern}" --label bot --label {type} [--label {domain}] --body-file /tmp/sub-issue-{parent}_{letter}.md`
+2. File via (tracker `local:<path>` in AGENTS.md: append to the backlog instead): `scripts/gh-file-issue.sh --title "feat: {parent title} — {sub-concern}" --label bot --label {type} [--label {domain}] --body-file /tmp/sub-issue-{parent}_{letter}.md`
 3. For blocked sub-issues: add `blocked` label and comment via `scripts/gh-ops.sh`
 4. Update parent: `scripts/gh-ops.sh labels PARENT --add composite` and
    `scripts/gh-ops.sh comment PARENT --body "Decomposed into..."`

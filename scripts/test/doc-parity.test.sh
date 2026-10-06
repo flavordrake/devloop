@@ -25,7 +25,7 @@ make_repo() {
   printf '#!/usr/bin/env bash\nexit 0\n' > "$d/scripts/test/a.test.sh"
   printf 'import os\nMODE = os.environ.get("APP_MODE")\nROUTES = ["/api/items"]\n' > "$d/src/server.py"
   printf '{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "scripts/hook.sh"}]}]}}\n' > "$d/.claude/settings.json"
-  printf '## Doc surfaces\n- env-prefix: APP_\n- code: *.sh src/*.py\n' > "$d/.claude/process.md"
+  printf '## Doc surfaces\n- env-prefix: APP_\n- code: *.sh src/*.py\n' > "$d/AGENTS.md"
   cat > "$d/README.md" <<'EOF'
 # Fixture
 
@@ -65,7 +65,7 @@ done
 # Boundaries: none of these are claims.
 R="$T/bound"; make_repo "$R"
 printf 'See build.sha256, https://example.com/scripts/x.sh, $HOME/scripts/y.sh, ~/scripts/z.sh.\nUse `scripts/*.sh` and `scripts/<name>.sh`; mobissh docs/other.md is theirs.\n' >> "$R/README.md"
-printf -- '- siblings: mobissh\n' >> "$R/.claude/process.md"
+printf -- '- siblings: mobissh\n' >> "$R/AGENTS.md"
 expect_clean "boundary tokens (.sha256, URL tail, \$VAR, ~, glob, placeholder, sibling) are not claims" "$R" docs-to-code.sh
 
 # Records make no claims; research makes no env/route/cli claims.
@@ -97,10 +97,27 @@ expect_find "a hook-called script no doc names" "$R" code-to-docs.sh '^UNDOCUMEN
 
 # Without env-prefix, getenv-style reads are the env surfaces.
 R="$T/noprefix"; make_repo "$R"
-printf '## Doc surfaces\n- code: *.sh\n' > "$R/.claude/process.md"
+printf '## Doc surfaces\n- code: *.sh\n' > "$R/AGENTS.md"
 printf 'const p = process.env.PORT_KNOB;\n' > "$R/src/app.ts"
 (cd "$R" && git add -A)
 expect_find "process.env read without a prefix" "$R" code-to-docs.sh '^UNDOCUMENTED env PORT_KNOB src/app\.ts:1$'
+printf '#!/usr/bin/env bash\n# Usage: scripts/tool.sh\necho "${ANDROID_HOME:-} ${JAVA_HOME:-} ${CARGO_HOME:-} ${NODE_ENV:-} ${TOOL_KNOB:-}"\n' > "$R/scripts/tool.sh"
+printf 'Run `scripts/tool.sh`.\n' >> "$R/README.md"
+(cd "$R" && git add -A)
+run "$R" code-to-docs.sh --warn
+if grep -qE 'env (ANDROID_HOME|JAVA_HOME|CARGO_HOME|NODE_ENV)' "$T/out" || ! grep -q 'env TOOL_KNOB' "$T/out"; then fail "toolchain env allowlist: $(cat "$T/out")"; else pass "well-known toolchain env vars are not surfaces"; fi
+
+# Config source: AGENTS.md first, legacy .claude/process.md when AGENTS.md has no
+# `## Doc surfaces`. The `code: src/*.py` glob makes an unnamed .py a finding.
+R="$T/legacy"; make_repo "$R"
+printf '# Agents\n' > "$R/.claude/process.md.tmp"
+mv "$R/AGENTS.md" "$R/.claude/process.md"
+mv "$R/.claude/process.md.tmp" "$R/AGENTS.md"
+printf 'x = 1\n' > "$R/src/extra.py"
+(cd "$R" && git add -A)
+expect_find "legacy .claude/process.md is read when AGENTS.md has no Doc surfaces" "$R" code-to-docs.sh '^UNDOCUMENTED file src/extra\.py '
+printf '## Doc surfaces\n- code: *.sh\n' > "$R/AGENTS.md"
+expect_clean "AGENTS.md Doc surfaces win over legacy process.md" "$R" code-to-docs.sh
 
 # Waivers: a justified entry suppresses, an unjustified one is a finding.
 R="$T/waive"; make_repo "$R"

@@ -67,9 +67,9 @@ Plugins can't ship rules, so repos link them (see below). Every session loads th
 
 ## Adopting devloop in a repo
 
-1. Write `.claude/process.md` with a `## Gates` section mapping `fast`, `full`, `device`, and `ship` to commands or scripts (see the `gates` rule). Optionally declare the default branch, version file, issue tracker (`github` or `local:<path>`), domain labels, and infra needs. Without it, devloop falls back to `scripts/fast-gate.sh`, then `scripts/gate.sh`.
+1. Write `AGENTS.md` at the repo root with a `## Gates` section mapping `fast`, `full`, `device`, and `ship` to commands or scripts (see the `gates` rule), and optionally a `## Project` section (default branch, version file, issue tracker `github` or `local:<path>`, domain labels, infra needs). Codex, opencode and pi read `AGENTS.md`; Claude Code reads `CLAUDE.md`, so add the line `@AGENTS.md` to it. Without gates, devloop falls back to `scripts/fast-gate.sh`, then `scripts/gate.sh`.
 2. Link the rules: an idempotent `scripts/link-devloop-rules.sh` that symlinks each devloop `rules/*.md` into `.claude/rules/devloop/` (devloop path overridable by `DEVLOOP_ROOT`). Re-run it when devloop adds rules.
-3. Call devloop scripts through the plugin (`${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh`), don't copy them. Upstream missing subcommands instead of forking.
+3. Call devloop scripts through the plugin, never copy or shim them. In skills and hooks: `${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh`. From a shell or repo script, resolve the installed version: `"$("$HOME/.claude/plugins/marketplaces/flavordrake/scripts/devloop-path.sh")/scripts/gh-ops.sh"` (the marketplace clone is the version-free bootstrap; `scripts/devloop-path.sh` returns the newest cached install). Upstream missing subcommands instead of forking.
 4. Run `/doc-parity` before every release. Release is blocked while code and docs drift.
 
 ## Structure

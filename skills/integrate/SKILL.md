@@ -6,7 +6,7 @@ description: Use when the user says "integrate", "review bot PRs", "merge bot fi
 # Integrate
 
 Review, gate, and merge or reject PRs on `bot/issue-{N}` branches. Labels and
-workflow states come from `.claude/process.md`; gate tiers from
+workflow states come from `AGENTS.md`; gate tiers from
 `${CLAUDE_PLUGIN_ROOT}/rules/gates.md`.
 
 Run in the foreground: the user sees triage and approves merges. Report per PR what
@@ -71,7 +71,7 @@ then set labels `--rm bot --add divergence`.
 After all merges, run the `device` tier once if the repo declares one and any merged
 PR touched device-relevant behavior. If it cannot run, list which PRs still need
 device validation; do not omit this silently. If the repo declares a post-merge
-deploy step in process.md, run it so the user is not testing a stale build.
+deploy step in AGENTS.md, run it so the user is not testing a stale build.
 
 ## TRACE
 

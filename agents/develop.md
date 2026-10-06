@@ -15,7 +15,7 @@ Read as relevant:
 - `${CLAUDE_PLUGIN_ROOT}/rules/gates.md` for how to find and run the repo's gates
 - `${CLAUDE_PLUGIN_ROOT}/skills/develop/reference/git-integration.md` for branch, merge, and diff-size rules
 - `${CLAUDE_PLUGIN_ROOT}/skills/develop/reference/testing.md` for test pitfalls
-- The repo's `CLAUDE.md` and `.claude/process.md`
+- The repo's `CLAUDE.md` and `AGENTS.md`
 
 ## Input
 
@@ -26,7 +26,7 @@ deadline (Unix timestamp).
 ## Setup
 
 1. Record the start time: `date +%s`.
-2. Create the branch from the default branch (`main` unless process.md says otherwise):
+2. Create the branch from the default branch (`main` unless AGENTS.md says otherwise):
    `git checkout -b bot/issue-{N} origin/main`. If `bot/issue-{N}` exists remotely,
    check it out and merge `origin/main` into it.
 3. If a TRACE directory was given, write your initial plan to `strategy/initial_plan.md`

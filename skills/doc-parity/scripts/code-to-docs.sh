@@ -90,8 +90,9 @@ surfaces() {
   fi
   dp_subcommands "$WORK/code-no-tests" | awk -F'\t' '{ print "cli\t" $1 " " $2 "\t" $3 }'
 }
-# Variables the OS, CI or Claude Code set are not this project's knobs.
-surfaces | awk -F'\t' '$1 != "env" || $2 !~ /^(HOME|PATH|USER|TMPDIR|PWD|SHELL|TERM|LANG|CI|EDITOR|PAGER|HOSTNAME|(CLAUDE|GITHUB|RUNNER|XDG|LC)_.*)$/' > "$WORK/surfaces"
+# Variables the OS, CI, Claude Code or a well-known toolchain set are not this
+# project's knobs.
+surfaces | awk -F'\t' '$1 != "env" || $2 !~ /^(HOME|PATH|USER|TMPDIR|PWD|SHELL|TERM|LANG|CI|EDITOR|PAGER|HOSTNAME|ANDROID_HOME|ANDROID_SDK_ROOT|JAVA_HOME|APKSIGNER|PUB_CACHE|FLUTTER_ROOT|PYTHONPATH|VIRTUAL_ENV|NODE_ENV|(CLAUDE|GITHUB|RUNNER|XDG|LC|CARGO)_.*)$/' > "$WORK/surfaces"
 
 # What the docs name: path-ish tokens (and their file names), words, backtick
 # words, and `tool.sh sub` pairs.

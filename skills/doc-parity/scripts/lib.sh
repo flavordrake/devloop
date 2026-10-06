@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # skills/doc-parity/scripts/lib.sh: shared by docs-to-code.sh and code-to-docs.sh.
 # Resolves the repo root, reads the `## Doc surfaces` section of
-# .claude/process.md, and writes the file lists both directions compare.
+# AGENTS.md (legacy fallback: .claude/process.md), and writes the file lists
+# both directions compare.
 # Portable: bash 3.2, POSIX awk, BSD or GNU grep/sed (no -P, no mapfile, no
 # associative arrays, no find -printf, no xargs -d).
 
@@ -66,7 +67,12 @@ dp_init() {
   top="$(unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR; git rev-parse --show-toplevel 2>/dev/null || pwd)"
   cd "$top"
   DP_ROOT="$top"
-  [[ -n "$cfg" ]] || cfg=".claude/process.md"
+  # AGENTS.md first; legacy .claude/process.md (deprecated) when AGENTS.md has
+  # no `## Doc surfaces`.
+  if [[ -z "$cfg" ]]; then
+    cfg="AGENTS.md"
+    if ! { [[ -f "$cfg" ]] && grep -qE "^## +Doc surfaces[[:space:]]*$" "$cfg"; }; then cfg=".claude/process.md"; fi
+  fi
 
   DP_RECORDS="docs/reviews/"
   DP_RESEARCH="docs/research/"

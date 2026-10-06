@@ -5,7 +5,7 @@ description: Use when the user says "delegate", "assign bot work", "dispatch iss
 
 # Delegation
 
-Labels, workflow states, gates, and domain labels come from the repo's `.claude/process.md`
+Labels, workflow states, gates, and domain labels come from the repo's `AGENTS.md`
 (gate tiers per the `gates.md` rule).
 
 Scan open issues, classify delegatability, enrich with direction, and dispatch to local
@@ -116,7 +116,7 @@ The prompt is the agent's entire brief. Each one has:
 Quality check before dispatch: objective unambiguous, every file exists, context is current,
 criteria testable without manual device testing, one concern.
 
-Labels per `.claude/process.md`: `bot` (remove `divergence` on re-delegation), `device`,
+Labels per `AGENTS.md`: `bot` (remove `divergence` on re-delegation), `device`,
 `composite`, `spike`, `conflict` (with a comment naming the other issue).
 
 ## Phase 5: Present and confirm

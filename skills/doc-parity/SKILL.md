@@ -29,7 +29,7 @@ Scripts operate on the git toplevel of the current directory:
 "${CLAUDE_PLUGIN_ROOT}/skills/doc-parity/scripts/code-to-docs.sh" --kinds called,file
 ```
 
-Options: `--warn|--block` (default block), `--kinds k1,k2`, `--root DIR`, `--config FILE` (alternate process.md). `doc-parity.sh --list docs|research|code|user-text` prints the inputs for layer 2.
+Options: `--warn|--block` (default block), `--kinds k1,k2`, `--root DIR`, `--config FILE` (alternate config file). `doc-parity.sh --list docs|research|code|user-text` prints the inputs for layer 2.
 
 Docs to code (`MISSING <kind> <value> <doc>:<line> (+N more)`):
 
@@ -43,7 +43,7 @@ Code to docs (`UNDOCUMENTED <kind> <value> <code>:<line>`):
 
 - `called`: a path the system calls (`.claude/settings.json`, `hooks.json`, `hooks/`, `.claude/hooks/`, `.githooks/`, `.github/workflows/`, `package.json`, `Makefile`, `justfile`, any shell script) is named in a doc.
 - `file`: every file matching the `code` globs is named in a doc.
-- `env`: prefixed words in non-test code, or (no prefix) getenv-style reads: sh `${X:-}` (not self-assigned), `os.environ`, `process.env`, `Platform.environment`/`fromEnvironment`, `System.getenv`, `env::var`, `os.Getenv`, `getenv`.
+- `env`: prefixed words in non-test code, or (no prefix) getenv-style reads: sh `${X:-}` (not self-assigned), `os.environ`, `process.env`, `Platform.environment`/`fromEnvironment`, `System.getenv`, `env::var`, `os.Getenv`, `getenv`. OS, CI and toolchain variables (`HOME`, `PATH`, `CI`, `JAVA_HOME`, `ANDROID_HOME`, `NODE_ENV`, `GITHUB_*`, `CARGO_*`, ...) are never surfaces.
 - `cli`: subcommands found by cheap heuristics: top-level sh `case "$1"|"$cmd"...` arms, argparse `add_parser`, click/commander `command(`, Dart `addCommand`, clikt `name =`.
 
 A file counts as documented by its full path, its file name, or a directory token above it (`scripts/test/` covers everything under it, which keeps waivers small).
@@ -52,7 +52,7 @@ A file counts as documented by its full path, its file name, or a directory toke
 
 ### Repo configuration
 
-In `.claude/process.md`, one bullet per key (values replace the defaults; globs: `*` crosses `/`, `**/` is any depth, trailing `/` is a directory):
+In `AGENTS.md` at the repo root (legacy fallback: `.claude/process.md` when `AGENTS.md` has no `## Doc surfaces`), one bullet per key (values replace the defaults; globs: `*` crosses `/`, `**/` is any depth, trailing `/` is a directory):
 
 ```markdown
 ## Doc surfaces
@@ -67,7 +67,7 @@ In `.claude/process.md`, one bullet per key (values replace the defaults; globs:
 - user-text: web/*.html assets/legal/*
 ```
 
-Defaults: no env prefix (getenv heuristics), `code: *.sh`, `records: docs/reviews/`, `research: docs/research/`, `ignore: .claude/doc-parity-ignore.txt`. Docs are every tracked `*.md` except records, changelogs/release notes, fixtures and `.claude/` internals (only `.claude/{rules,agents,skills}/` and `.claude/process.md` count). Research docs make path and script claims only. `siblings` names other projects whose paths docs quote (`mobissh docs/x.md`). `user-text` lists user-facing text shipped in code for layer 2.
+Defaults: no env prefix (getenv heuristics), `code: *.sh`, `records: docs/reviews/`, `research: docs/research/`, `ignore: .claude/doc-parity-ignore.txt`. Docs are every tracked `*.md` except records, changelogs/release notes, fixtures and `.claude/` internals (only `.claude/{rules,agents,skills}/` and legacy `.claude/process.md` count). Research docs make path and script claims only. `siblings` names other projects whose paths docs quote (`mobissh docs/x.md`). `user-text` lists user-facing text shipped in code for layer 2.
 
 Ignore file: `kind:glob` (or a bare glob for any kind), one per line, a comment above each entry or block saying why (planned in #N with a date, a foreign path, an internal helper no reader needs). Remove an entry when its item lands.
 

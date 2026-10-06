@@ -5,12 +5,12 @@ description: Use when the user says "release", "tag a release", "cut a release",
 
 # Release
 
-Labels and conventions come from `.claude/process.md`; gate tiers from
+Labels and conventions come from `AGENTS.md`; gate tiers from
 `${CLAUDE_PLUGIN_ROOT}/rules/gates.md`.
 
 ## 1. Version file
 
-Use the version file declared in process.md. Otherwise probe in order and use the
+Use the version file declared in AGENTS.md. Otherwise probe in order and use the
 first found: `pubspec.yaml`, `Cargo.toml`, `pyproject.toml`, `package.json`,
 `build.gradle.kts`, `build.gradle`, `platformio.ini`. None found, or several that
 disagree: ask the user.
@@ -83,7 +83,7 @@ Then:
 git push origin main --follow-tags
 ${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh release "v{VERSION}" --notes-file <changelog file>
 ```
-If process.md declares a post-release deploy or verification step, run it.
+If AGENTS.md declares a post-release deploy or verification step, run it.
 
 ## TRACE
 

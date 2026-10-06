@@ -1,7 +1,7 @@
 {
   "name": "devloop",
-  "version": "0.3.2",
-  "description": "TDD-driven SDLC toolchain — cycle, develop, integrate, delegate, trace, and more",
+  "version": "0.4.0",
+  "description": "Stack-neutral SDLC toolchain — cycle, spec-develop, develop, integrate, release, via a repo-declared gate contract",
   "author": {
     "name": "flavordrake"
   },

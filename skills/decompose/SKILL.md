@@ -39,7 +39,7 @@ For each area of change described in the issue:
    not arbitrary line-count splits
 3. **Check coupling** — if two changes must be in the same commit to avoid breaking
    the build, they belong in the same sub-issue
-4. **Assess size** — each sub-issue should be bot-capable: <=200 lines diff, <=5 files
+4. **Assess size** — each sub-issue within the `decomposition.md` thresholds
 
 ## Phase 3: Analyze test impact
 
@@ -52,7 +52,7 @@ For each proposed sub-issue:
    - **Assertion updates** — existing tests with outdated expectations
    - **Mock updates** — test mocks that no longer match the API
    - **No test changes** — internal refactor with existing coverage
-3. **Flag headless vs device** — does this sub-issue need emulator validation?
+3. **Flag gate tier** — does this sub-issue need the `device` tier (per `gates.md`)?
 4. **Estimate test scope** — how many test files affected, how many assertions
 
 ## Phase 4: Determine ordering
@@ -91,9 +91,9 @@ Return a structured proposal:
 
 For each approved sub-issue:
 
-1. Write body to `/tmp/sub-issue-{parent}_{letter}.md` (include full `@claude` delegation
-   instructions with file scope, acceptance criteria, context snippets, and test requirements)
-2. File via: `scripts/gh-file-issue.sh --title "feat: {parent title} — {sub-concern}" --label bot --label {type} --body-file /tmp/sub-issue-{parent}_{letter}.md`
+1. Write body to `/tmp/sub-issue-{parent}_{letter}.md` with file scope, acceptance criteria,
+   context snippets, and test requirements (the develop agent's brief)
+2. File via (tracker `local:<path>` in process.md: append to the backlog instead): `scripts/gh-file-issue.sh --title "feat: {parent title} — {sub-concern}" --label bot --label {type} [--label {domain}] --body-file /tmp/sub-issue-{parent}_{letter}.md`
 3. For blocked sub-issues: add `blocked` label and comment via `scripts/gh-ops.sh`
 4. Update parent: `scripts/gh-ops.sh labels PARENT --add composite` and
    `scripts/gh-ops.sh comment PARENT --body "Decomposed into..."`

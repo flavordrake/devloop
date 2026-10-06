@@ -1,29 +1,23 @@
 ---
 name: issue
-description: Use when the user says "bug:", "feature:", "feat:", "fix:", "issue:", "chore:", or explicitly "/issue". File a GitHub issue without interrupting the current workflow. Run as a background Task so the main conversation continues unblocked.
+description: Use when the user says "bug:", "feature:", "feat:", "fix:", "issue:", "chore:", or explicitly "/issue". File an issue (GitHub or the repo's local backlog) without interrupting the current workflow. Run as a background Task so the main conversation continues unblocked.
 ---
 
 # Issue Filing
 
-> **Process reference:** `.claude/process.md` defines the label taxonomy, workflow states,
-> and conventions that this skill must follow.
+Labels, domain labels, and the issue tracker come from the repo's `.claude/process.md`.
 
-File a GitHub issue from an in-conversation observation. The user types something like
-`bug: default WSS URL is missing /ssh` and expects it handled without derailing current work.
+File an issue from an in-conversation observation. The user types something like
+`bug: default URL is missing /ssh` and expects it handled without derailing current work.
 
 ## Execution Model
 
-Spawn a `general-purpose` agent with the prompt from `.claude/agents/issue-manager.md`.
-Use `model: "sonnet"`, `run_in_background: true`. Custom subagent_types are broken in
-file-based discovery (see `.claude/rules/agents.md`).
-
-Background agents auto-deny permissions not pre-approved in `settings.json`. If the
-agent fails on permissions, run it in foreground instead or file directly in the main
-conversation.
+Spawn `subagent_type: devloop:issue-manager` with `run_in_background: true`. If it fails on
+permissions, run it in foreground or file directly in the main conversation.
 
 ## Step 1: Parse the trigger
 
-Extract from the user's message. Apply exactly one **Type** label per `.claude/process.md`:
+Apply exactly one **Type** label:
 
 | Prefix | Type label | Title prefix |
 |---|---|---|
@@ -34,96 +28,39 @@ Extract from the user's message. Apply exactly one **Type** label per `.claude/p
 | chore: | `chore` | chore: |
 | issue: | (classify from description) | (classify from description) |
 
-If the prefix is `issue:` or `/issue`, read the description and pick the best type label.
-
-Add **Domain** labels if the description matches keywords:
-
-| Keywords | Label |
-|---|---|
-| touch, gesture, swipe, pinch, scroll | `touch` |
-| ios, safari, webkit, iphone, ipad | `ios` |
-| security, vault, credential, encrypt | `security` |
-| ux, ui, layout, mobile, keyboard, panel | `ux` |
-| image, sixel, kitty, iterm | `image` |
+Add **Domain** labels from the domain list in `.claude/process.md` when the description
+matches. If process.md declares none, add none.
 
 Add **Shape** labels when applicable:
 
 | Condition | Label |
 |---|---|
-| Issue needs research before code can be written | `spike` |
-| Issue needs emulator/device validation | `device` |
-| Issue is too large for one bot pass | `composite` |
+| Needs research before code can be written | `spike` |
+| Needs emulator/device/hardware validation | `device` |
+| Too large for one develop pass | `composite` |
 
-Do NOT apply delegation labels (`bot`, `divergence`) -- those are managed by `/delegate`
-and `/integrate` respectively.
+Do NOT apply `bot` or `divergence` -- `/delegate` and `/integrate` manage those.
 
 ## Step 2: Gather context
 
-Build a concise issue body. No filler.
+Concise body, no filler:
 
-- **Context line**: one sentence on what was being worked on (branch, feature, test).
-  Pull from the conversation state.
-- **Description**: expand the user's observation into a clear problem statement or feature
-  request. Add technical details you know (file paths, function names, config values).
-- **Reproduction**: for bugs, describe how to reproduce if apparent. For features, describe
-  the user need.
-- **Version snapshot**: capture both the code state and what the user is actually seeing.
-  The user often tests on a running server while code changes happen in parallel, so these
-  may differ.
-  ```bash
-  scripts/gh-ops.sh version
-  ```
-  This outputs `Code: abc1234 | Server: 0.1.0:def5678` (or `server not running`).
-  If they differ, flag it as `(STALE -- server hasn't been restarted)`.
+- **Context line**: what was being worked on (branch, feature, test).
+- **Description**: clear problem statement or feature request with known technical details
+  (paths, functions, config values).
+- **Reproduction**: steps for bugs, user need for features.
+- **Version**: `scripts/gh-ops.sh version` (code hash; flags a stale running build if the
+  repo reports one).
+- **Evidence**: if the repo declares repro artifacts (test reports, screenshots, recordings,
+  logs) in `.claude/process.md`, attach recent ones (last ~30 minutes) clearly tied to the
+  issue. Otherwise omit.
 
-## Step 3: Check for recent test artifacts
+## Step 3: Duplicate check and file
 
-Check for recent test artifacts in either test results directory. If the report JSON
-was modified within 30 minutes (`stat -c %Y` vs `date +%s`), include relevant evidence:
+Search first (`scripts/gh-ops.sh search "<key phrase>"`, or grep the local backlog). If a
+match exists, ask whether to file or comment on the existing one.
 
-**Appium tests** (primary):
-1. **test-results-appium/results.json**: parse for pass/fail summary, failed test names
-2. **test-history/appium/**: archived recordings and results per run
-
-**Legacy CDP emulator tests**:
-1. **test-results/emulator/report.json**: pass/fail summary, failed test names and errors
-2. **test-results/emulator/frames/**: frame filenames that relate to the issue
-3. **test-results/emulator/recording.mp4**: existence and timestamp
-
-**Both paths**:
-4. **Per-test screenshots**: check `test-results/*-android-emulator/` for relevant PNGs
-
-If a recording exists but no frames have been extracted (no `frames/` directory or it's
-empty), run `scripts/review-recording.sh` to generate uniform frame samples. This
-is useful when the issue relates to visual behavior that screenshots alone don't capture.
-
-Only include artifacts clearly connected to the issue. If nothing is recent or relevant,
-skip this section entirely.
-
-## Step 4: Add @claude bot task (optional)
-
-If the issue is actionable (bug with clear reproduction, feature with clear scope), append:
-
-```
-@claude <Specific instruction for what to investigate or implement.
-Reference relevant files, test commands, or prior issues.>
-```
-
-Do NOT add `@claude` for research issues (`spike`), things needing real-device validation
-(`device`), or vague requests that need scoping. The `/delegate` skill handles enriching
-issues with full delegation context and applying the `bot` label -- this step is just a
-lightweight hint for obviously bot-ready issues.
-
-## Step 5: Duplicate check and file
-
-Before filing, check for existing issues:
-```bash
-scripts/gh-ops.sh search "<key phrase from title>"
-```
-
-If a match exists, warn the user and ask whether to file or comment on the existing one.
-
-Write the body to a temp file, then file using the wrapper script. Body template:
+Body template:
 
 ```
 Filed while working on <context> (<branch>).
@@ -131,45 +68,28 @@ Filed while working on <context> (<branch>).
 <Problem statement or feature description with technical details.>
 
 ## Reproduction
-<Steps to reproduce, or user need for features.>
+<Steps, or user need.>
 
 ## Version
-<output from `scripts/gh-ops.sh version`>
-<If mismatched: "(STALE -- server hasn't been restarted)">
+<version output>
 
-## Test Evidence
-<Only if recent artifacts exist (Step 3). Otherwise omit this section entirely.>
-- Run: <pass/fail summary from report.json>
-- Failed: <test names and error snippets>
-- Frames: <relevant filenames from frames/ or review/>
-- Recording: test-results/emulator/recording.mp4 (<timestamp>)
-
-@claude <Specific bot instructions, if actionable (Step 4).>
+## Evidence
+<Only if Step 2 found relevant artifacts.>
 ```
 
-Write the composed body to a temp file, then file:
+**Tracker `github`** (default): write the body to a file, then
+`scripts/gh-file-issue.sh --title "<prefix>: <title>" --label "<type>" [--label "<domain>"] --body-file <file>`.
 
-```bash
-# Write body to temp file (use the Write tool, not a heredoc)
-# Then file:
-scripts/gh-file-issue.sh --title "<prefix>: <title>" --label "<type>" --label "<domain>" --body-file /tmp/issue-body.md
-```
+**Tracker `local:<path>`**: append an entry to `<path>` following the format already used
+in that file (title line with type/labels, then the body). Commit it only if the repo's
+process.md says backlog edits are committed.
 
-**Important:** Use the Write tool to create `/tmp/issue-body.md`, then call the script.
-Do NOT use heredocs or `$(cat <<EOF)` in the bash command -- that's what causes
-per-command approval prompts. One Write + one `scripts/gh-file-issue.sh` call.
+## Step 4: Report back
 
-Only include `--label` flags for labels that apply. Type is always one. Domain and shape
-are zero or more. See `.claude/process.md` for the full label taxonomy.
-
-## Step 6: Report back
-
-Output: `Filed: <issue-url>`
-
-If filing failed, report the error. Do not retry silently.
+`Filed: <issue-url or path:line>`. On failure, report the error; don't retry silently.
 
 ## Edge Cases
 
-- Bare prefix with no description (e.g. just `bug:`) -- ask for at least a one-phrase description
-- `gh` not authenticated -- report error immediately
-- Only use labels defined in `.claude/process.md` -- all are pre-created on the repo
+- Bare prefix with no description (just `bug:`) -- ask for at least a phrase
+- `gh` not authenticated -- report immediately
+- Only use labels defined in `.claude/process.md`

@@ -15,6 +15,9 @@ summary of what shipped and what's next.
 - `/cycle "ime text entry"` — explicit theme keywords
 - `/cycle --dry-run` — discover and plan only, don't develop
 
+Labels and gate tiers come from `.claude/process.md` (gate contract: the `gates.md` rule).
+If a TRACE is active, follow the agent-trace skill.
+
 ## Phase 0.5: Surface Unworked Issues
 
 Before theme filtering, check for issues that may have been filed outside of sessions
@@ -38,11 +41,7 @@ Present any findings to the user before proceeding to theme selection.
 
 ## Phase 1: Discover and Classify
 
-```bash
-scripts/delegate-discover.sh
-scripts/delegate-classify.sh
-```
-
+Spawn `subagent_type: devloop:delegate-scout` (runs the repo's discover/classify scripts).
 Read the classified JSON. Filter to issues matching the theme (title, labels, or body
 contain theme keywords). Skip `icebox`, `blocked`, and `close` classifications.
 
@@ -60,12 +59,12 @@ Found: N issues matching theme (M total open)
 
 Group matching issues by shared concern:
 1. **File overlap** — issues touching the same source files
-2. **Module proximity** — issues in the same `src/modules/` file
+2. **Module proximity** — issues in the same module or package
 3. **Functional cluster** — issues describing facets of the same behavior
 
 For each cluster:
 - If 2+ issues would conflict (same files), sequence them or merge
-- If a cluster exceeds bot capability (>200 lines, >5 files), decompose
+- If a cluster exceeds the `decomposition.md` thresholds, decompose
 - If issues are independent, develop in parallel
 
 ## Phase 3: Plan
@@ -99,8 +98,7 @@ Wait for user approval before executing.
 For each approved action, in order:
 
 ### Develop (single issue)
-Use the `/develop N` skill. Spawn agents with `isolation: "worktree"`.
-max 4 parallel agents.
+Use the `/develop N` skill (`devloop:develop`, worktree-isolated, max 4 parallel).
 
 ### Merge (combine issues)
 1. Pick the broadest issue as primary
@@ -120,48 +118,27 @@ Use the `/decompose N` skill. File sub-issues, then develop them.
 While develop agents are running in background, use the wait time productively:
 
 1. **Integrate** — merge any completed PRs from earlier in the cycle or prior cycles
-2. **Rebuild server** — `scripts/container-ctl.sh ensure` after merges
-3. **Simplify** — review recently changed code for quality, fix pre-existing lint/type errors
-4. **Compile learnings** — update skills, rules, project memory, docs with session insights
-5. **File issues** — capture bugs and improvements noticed during the session
-6. **Prepare Q&A** — draft clarifying questions for human-only/blocked issues using AskUserQuestion
+2. **Simplify** — review recently changed code for quality, fix pre-existing lint/type errors
+3. **Compile learnings** — update skills, rules, project memory, docs with session insights
+4. **File issues** — capture bugs and improvements noticed during the session
+5. **Prepare Q&A** — draft clarifying questions for human-only/blocked issues using AskUserQuestion
 
-This phase runs concurrently — don't block on agent completion. Check agent output
-files periodically but don't poll. You'll be notified on completion.
+Don't block on agents: you're notified when each completes. For other background work
+(gate runs, builds, device leases), watch it with the Monitor tool instead of polling or sleeping.
 
 ## Phase 6: Gate
 
 For each completed development:
 
-```bash
-scripts/integrate-gate.sh <branch-name>
-```
+Run the repo's `full` gate tier on the branch via `devloop:integrate-gater` agents
+(parallel, one per branch). Add the `device` tier when the issue is labeled `device`.
 
-Use **integrate-gater** agents with `isolation: "worktree"` for parallel gating.
+## Phase 7: Harvest
 
-## Phase 7: TRACE Harvesting
-
-After all agents complete, collect and review their traces:
-
-1. List all traces: `ls .traces/trace-*/TRACE.md`
-2. For each trace:
-   - Read TRACE.md — check status, knowledge seed, ambiguity gap
-   - If knowledge seed is valuable: create/update memory file
-   - If ambiguity gap reveals a missing rule: update `.claude/rules/`
-   - If pivot pattern repeats across traces: file a process improvement issue
-3. **Security finding aggregation**:
-   - Collect `logs/security-findings.md` from all traces in this cycle
-   - Cross-reference findings across agents — same pattern in multiple PRs
-     indicates a systemic issue (e.g., innerHTML usage pattern, missing escHtml)
-   - Aggregate into a single security summary for the cycle report
-   - Recurring patterns → file a security issue or update `.claude/rules/security.md`
-   - This replaces the need for a cold-start release audit on code that was
-     already incrementally reviewed
-4. Validate traces exist and are informative:
-   - Develop agents without a trace directory = process violation (note in report)
-   - Traces with empty TRACE.md = incomplete
-   - Flag incomplete traces so the develop agent prompt can be tightened
-5. Report harvested insights in the cycle summary
+1. Collect each agent's result and any security findings. The same finding in multiple PRs
+   is systemic: file one security issue or update `.claude/rules/security.md`.
+2. Repeated pivots or ambiguity across agents: update rules/skills or file a process issue.
+3. Report harvested insights in the cycle summary.
 
 ## Phase 8: Report
 
@@ -194,7 +171,7 @@ Per `.claude/process.md`:
 
 ## Rules
 
-- max 3 parallel develop agents
+- Max 4 parallel develop agents
 - Theme filter is additive — issues without theme keywords are shown but deprioritized
 - Never develop `human-only` issues — report them as "needs device testing"
 - Worktree cleanup deferred to release — do NOT clean while agents might be active

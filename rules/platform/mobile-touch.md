@@ -1,3 +1,7 @@
+---
+paths:
+  - "**/*.{ts,tsx,js,jsx,mjs,css,scss,html,vue,svelte}"
+---
 # Mobile Touch Constraints
 
 Learnings from device testing that aren't documented in any spec.

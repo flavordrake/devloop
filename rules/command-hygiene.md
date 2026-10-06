@@ -1,31 +1,11 @@
-# Command Hygiene
+# Workflow and Command Hygiene
 
-## Intent-based scripts over compound commands
-
-- **One script per Bash call.** No `&&` chains, no `;` sequences, no compound commands. Chained commands cause false positive failures (e.g., local branch delete fails but remote merge succeeded, exit 1 blocks downstream steps).
-- **No shell redirects.** Scripts handle their own output. No `> /tmp/foo`, no `2>/dev/null`.
-- **No heredocs in Bash.** Use the Write tool to create files, then pass `--body-file`.
-- **Prefer existing scripts over raw commands.** Check `ls scripts/` before writing inline commands. If a compound pattern repeats, capture it as an intent-named script.
-- **Never prefix script calls with `bash`.** All scripts have shebangs and execute permissions. Call `scripts/foo.sh` not `bash scripts/foo.sh`.
-- **Never use raw CLI tool commands when wrapper scripts exist.** Raw calls bypass error handling, audit logging, and hook notifications. If a wrapper doesn't have a subcommand for what you need, add one — don't work around it.
-
-## Error handling
-
-- Never use `|| true` to swallow errors. Use `if ! cmd; then log "failed (reason)"; fi`.
-- **Exception: grep in pipelines.** Under `set -euo pipefail`, `grep` exits non-zero on zero matches, killing the pipeline. Wrap in a function: `extract() { grep -oP 'pattern' || true; }`. This is the only valid use of `|| true`.
-
-## Script conventions
-
-- **Timestamps in filenames use compact ISO-8601 with tz offset:** `date +%Y%m%dT%H%M%S%z` → `20260303T150827-0500`. Never use bare `%Y%m%d-%H%M%S`.
-- **Temp and log directories:** Every script defines project-namespaced env vars near the top (after `set -euo pipefail`) and creates the directories before use. Do NOT use `TMPDIR` as the variable name — it conflicts with the system `TMPDIR` used by `mktemp`.
-- Scripts log via `exec > >(tee -a "$LOGFILE") 2>&1`.
-
-## Safe operations
-
-- **Never use raw `rm -rf` on worktree paths.** Use safe cleanup scripts or functions that check `is_main_repo` before deletion.
-- **Never use raw `git checkout`, `git branch -D`, or `git worktree remove` after agent operations.** Use intent-driven scripts instead.
-- **Verify CWD before any destructive operation.** CWD can drift into worktree directories after agent operations.
-
-## Output style
-
-- Don't use multiline text separators in logs, scripts, summaries, and reports (no `====`, no `----`). It's noise and wastes tokens.
+- Fix the process, not the symptom: when an agent or script fails, fix the guard/script; don't hand-do the task.
+- Call out inferred constraints that affect architecture, language, or testability ("Assuming X, affects Y. Confirm?"); mark them [INFERRED] in rules.
+- `bug: <text>` from the user = file an issue (`/issue`), don't fix inline.
+- Prefer existing scripts (repo `scripts/`, then devloop's) over raw CLI calls; capture repeated compound patterns as intent-named scripts.
+- Call scripts directly (`scripts/foo.sh`), never `bash scripts/foo.sh`; scripts have shebangs and exec bits.
+- Never `|| true`; use `if ! cmd; then log "failed (reason)"; fi`. Sole exception: grep under `set -euo pipefail`, wrapped in a function: `extract() { grep -o 'pat' || true; }`.
+- Timestamps in filenames: `date +%Y%m%dT%H%M%S%z` (`20260303T150827-0500`).
+- Don't name a script variable `TMPDIR` (clashes with mktemp).
+- Worktree safety: never raw `rm -rf`, `git branch -D`, or `git worktree remove` on agent worktrees; don't clean worktrees while agents run (`git worktree prune` is always safe); check CWD before destructive operations.

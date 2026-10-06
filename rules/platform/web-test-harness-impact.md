@@ -1,7 +1,10 @@
+---
+paths:
+  - "**/*.{ts,tsx,js,jsx,mjs,css,scss,html,vue,svelte}"
+---
 # Web/Mobile: Test Harness Impact from Behavioral Changes
 
-Platform-specific extension of the TRACE behavioral change checklist
-(see `rules/trace-contract.md` for the general principle).
+When a change alters initial system state, check every test harness that assumes the old state.
 
 ## What counts as "initial system state" for web apps
 

@@ -64,6 +64,18 @@ _issue_has_label() {
   [ "$(gh issue view "$1" --json labels --jq "any(.labels[]; .name == \"$2\")")" = "true" ]
 }
 
+# Stacked PRs: deleting a merged branch makes GitHub close PRs based on it
+# instead of retargeting them, so move them onto the merged PR's base first.
+_retarget_stacked() {
+  local base head dep
+  base="$(gh pr view "$1" --json baseRefName --jq .baseRefName)"
+  head="$(gh pr view "$1" --json headRefName --jq .headRefName)"
+  for dep in $(gh pr list --base "$head" --state open --json number --jq '.[].number'); do
+    echo "Retargeting stacked PR #${dep} onto ${base}" >&2
+    gh pr edit "$dep" --base "$base"
+  done
+}
+
 # _cleanup_pr_worktree PR_NUM — remove agent worktrees holding the PR branch and
 # the local branch before merge. Sets PR_HEAD_BRANCH, and WORKTREE_HELD=1 when a
 # worktree outside .claude/worktrees/ (or the main checkout) still holds the
@@ -292,6 +304,7 @@ case "$CMD" in
       esac
     done
     echo "Merging PR #${PR_NUM} (${STRATEGY#--})" >&2
+    _retarget_stacked "$PR_NUM"
     _cleanup_pr_worktree "$PR_NUM"
     if [ "$WORKTREE_HELD" -eq 0 ]; then
       gh pr merge "$PR_NUM" "$STRATEGY" --delete-branch
@@ -419,6 +432,7 @@ case "$CMD" in
         sleep 3
         continue
       fi
+      _retarget_stacked "$PR_NUM"
       if MERGE_ERR=$(gh pr merge "$PR_NUM" "$STRATEGY" --delete-branch 2>&1); then
         MERGE_OK=1
         break

@@ -16,8 +16,9 @@
 # Usage: with-fleet-emulator.sh -- <command...>
 #
 # Env:
-#   EMU_HOST           ssh target holding the lease (default emu@android-emulator)
-#   EMU_ADB            adb endpoint exported to the child (default android-emulator:5556)
+#   EMU_HOST           ssh target holding the lease (default emu@android-emulator.<tailnet>)
+#   EMU_TAILNET        MagicDNS suffix (default: from `tailscale status`); empty = short names
+#   EMU_ADB            adb endpoint exported to the child (default android-emulator.<tailnet>:5556)
 #   EMU_CAPTOKEN       pre-minted capability token (default: hub acquire)
 #   EMU_LEASE_WAIT     seconds to wait for a busy lease (default 900)
 #   EMU_LEASE_MAXHOLD  seconds before the lease auto-releases (default 7200; the
@@ -27,8 +28,17 @@
 #   EMU_LOG_DIR        where the remote ensure/boot output goes
 set -euo pipefail
 
-EMU_HOST="${EMU_HOST:-emu@android-emulator}"
-EMU_ADB="${EMU_ADB:-android-emulator:5556}"
+# Full tailnet names: known_hosts pins the FQDN, not the MagicDNS short name.
+# The suffix is read from tailscale at runtime so this public repo names no tailnet.
+tailnet_suffix() {
+  if command -v tailscale >/dev/null && command -v jq >/dev/null; then
+    tailscale status --json | jq -r '.MagicDNSSuffix // empty'
+  fi
+}
+EMU_TAILNET="${EMU_TAILNET-$(tailnet_suffix)}" # set-but-empty means short names
+EMU_FQDN="android-emulator${EMU_TAILNET:+.$EMU_TAILNET}"
+EMU_HOST="${EMU_HOST:-emu@$EMU_FQDN}"
+EMU_ADB="${EMU_ADB:-$EMU_FQDN:5556}"
 EMU_LEASE_WAIT="${EMU_LEASE_WAIT:-900}"
 EMU_LEASE_MAXHOLD="${EMU_LEASE_MAXHOLD:-7200}"
 EMU_REPO="${EMU_REPO:-/opt/android-emulator}"

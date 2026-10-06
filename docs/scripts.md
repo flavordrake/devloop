@@ -37,7 +37,7 @@ devloop's shipped scripts. Call them through the plugin (`${CLAUDE_PLUGIN_ROOT}/
 ## Sessions and infra
 
 - `scripts/launch-session.sh [kickoff|--continue]`: open tmux window `<name>` running a Remote Control Claude session for the cwd's repo. `TMUX_SESSION` (default `main`), `SESSION_NAME` (default: repo directory name).
-- `scripts/with-fleet-emulator.sh -- <command...>`: run a command holding an exclusive lease on the shared fleet emulator. `EMU_HOST`, `EMU_ADB`, `EMU_CAPTOKEN`, `EMU_LEASE_WAIT`, `EMU_LEASE_MAXHOLD`, `EMU_REPO`, `EMU_LEASE`, `EMU_LOG_DIR`; defaults in the script header.
+- `scripts/with-fleet-emulator.sh -- <command...>`: run a command holding an exclusive lease on the shared fleet emulator. `EMU_HOST`, `EMU_ADB`, `EMU_TAILNET`, `EMU_CAPTOKEN`, `EMU_LEASE_WAIT`, `EMU_LEASE_MAXHOLD`, `EMU_REPO`, `EMU_LEASE`, `EMU_LOG_DIR`; defaults in the script header.
 
 ## Plugin
 

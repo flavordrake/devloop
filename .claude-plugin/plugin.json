@@ -1,6 +1,6 @@
 {
   "name": "devloop",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Stack-neutral SDLC toolchain — cycle, spec-develop, develop, integrate, release, via a repo-declared gate contract",
   "author": {
     "name": "flavordrake"

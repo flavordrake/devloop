@@ -3,315 +3,102 @@ name: develop
 description: Use when the user says "develop", "work on issue", "implement issue", "fix issue N", or explicitly "/develop N". Spawns a local develop agent in a worktree to implement one or more GitHub issues. Supports batch mode ("/develop 3,9,16") with max 4 parallel agents. Without arguments, auto-proposes bot-labeled issues ranked by risk and relevance.
 ---
 
-# Local Development Agent
+# Develop
 
-Spawn isolated develop agents to implement GitHub issues locally. Replaces the remote
-Claude bot (GitHub Actions) with faster, more reliable local execution.
+Spawn isolated `devloop:develop` agents to implement GitHub issues.
 
-## Input parsing
+## Input
 
-- `/develop 16` → single issue
-- `/develop 3,9,16` → batch (max 3 parallel, rest queued)
-- `/develop` (no args) → **auto-propose mode** (see below)
+- `/develop 16`: single issue, foreground
+- `/develop 3,9,16`: batch, background, max 4 parallel, rest queued
+- `/develop`: auto-propose
 
-## Auto-propose mode
+## Auto-propose
 
-When called without arguments, propose issues to develop based on risk and relevance:
+Rank open `bot`-labeled issues (via `scripts/develop-propose.sh --max 5` if the repo
+has it, else `${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh fetch-issues`) by:
+- Risk: small single-module scope ranks above multi-module or security-sensitive code
+- Theme: relation to recent `git log`
+- Freshness: no prior bot attempts ranks higher
+- Blockers: `blocked` and `device` labels rank lower
 
-```bash
-scripts/develop-propose.sh --max 5
-```
+Show `| # | Title | Risk | Score | Reason |`, then start the top unblocked issue
+immediately; the user invoked `/develop` to get work done, not to pick from a menu.
 
-This fetches open `bot`-labeled issues, scores them by:
-- **Risk**: low (single file, small scope) scores higher than high (server, vault, multi-module)
-- **Theme**: matches against recent git log to surface issues related to current work
-- **Freshness**: no prior bot attempts scores higher
-- **Blockers**: `blocked` and `device` labels reduce score
+## Pre-flight (per issue)
 
-Present the ranked proposals as a table:
+1. Issue exists, is open, and has a body: `${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh fetch-issues {N}`. No body: ask the user to add scope.
+2. Open PR on `bot/issue-{N}`: `${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh search "head:bot/issue-{N}"`. If one exists, ask: resume on that branch, or skip?
+3. Prior failures in `memory/bot-attempts.md`.
+4. Files in scope from the issue body; if missing, read likely source files and keep scope narrow.
 
-```
-| # | Title | Risk | Score | Reason |
-|---|-------|------|-------|--------|
-```
-
-Start developing the top-scored issue immediately. No approval step — the user
-invoked `/develop` because they want work done, not a menu. If the top issue is
-blocked, skip to the next unblocked one. For batch, develop the top 2 unblocked
-in parallel.
-
-## Pre-flight checks
-
-For each issue number:
-
-1. Verify issue exists and is open:
-   ```bash
-   scripts/gh-ops.sh fetch-issues {N}
-   ```
-
-2. Check for existing open PR on `bot/issue-{N}`:
-   ```bash
-   scripts/gh-ops.sh search "head:bot/issue-{N}"
-   ```
-   If an open PR exists, ask the user: resume (force-push) or skip?
-
-3. Check for prior failure summaries in `memory/bot-attempts.md`
-
-4. Read the delegate skill's conventions: files in scope should be identified from the
-   issue body. If the issue body lacks scope, read the relevant source files to determine
-   likely targets. Keep scope narrow.
-
-## North Star: Faithful Input Representation
-
-> "User's intended text is faithfully represented to the terminal as entered, in all cases."
-
-For IME/input-related issues, the test infrastructure in `tests/emulator/fixtures.js` provides:
-- `IntentCapture` — records what the user intended (swipe, voice, keyboard)
-- `TerminalReceiver` — records what the terminal actually received
-- `assertFaithful(intent, receiver, expected)` — the North Star assertion
-
-Tests must verify **faithfulness** (intent == received), not just mechanics.
-
-## Composing the agent prompt
-
-For each issue, build a prompt that includes:
+## Agent prompt
 
 ```
 Issue #{N}: {title}
 
 ## Issue body
-{full issue body from gh issue view}
+{full body}
 
 ## Prior failures
-{section from bot-attempts.md for this issue, or "No prior attempts"}
+{bot-attempts.md section, or "No prior attempts"}
 
 ## Prior TRACE context
-{check .traces/ for existing traces related to this issue:
-  ls .traces/trace-*issue-{N}* 2>/dev/null
-If found, read each TRACE.md and extract:
-  - status (success/failure/partial)
-  - knowledge seed (one-sentence heuristic)
-  - pivots (what was tried and why it changed)
-  - ambiguity gap (what was unclear)
-Include as a focused summary — NOT the full trace content.
-If no prior traces: "No prior traces."}
+{for .traces/trace-*issue-{N}*: status, knowledge seed, pivots, ambiguity gap; a summary, not full content. Or "No prior traces."}
 
 ## Session learnings
-{include any session-level learnings relevant to the agent's task scope.
-These come from user corrections and process discoveries in the current
-orchestrator session. Focus on strategy, not implementation details.
-Example: "User correction: ^keys go at end of keybar, not interspersed"
-Example: "IME state machine is source of truth — no external detection logic"}
+{user corrections and process discoveries from this session relevant to the task}
 
 ## Files in scope
-{list of files, read each to extract relevant context snippets}
-
-## Context
-{code snippets from the files showing patterns to follow}
+{files, with context snippets showing patterns to follow}
 
 ## Constraints
-- Max 3 development cycles
-- Wall clock deadline: {current_time + 3600} (1 hour)
-- Deadline timestamp: {unix_timestamp}
-- Do NOT touch files outside scope
-- Do NOT add inline styles
-- Do NOT over-engineer — minimal changes only
-- Follow existing code patterns
-
-## TDD Requirements (MANDATORY)
-
-### Two-phase TDD (recommended for non-trivial issues)
-
-For features with non-obvious edge cases, protocol changes, or UI behavior:
-
-1. **Phase A — Test design (Opus)**: Spawn a `/write-tests` agent first. It reads
-   the issue, reads the code, writes failing tests, and pushes to `bot/issue-{N}`.
-   This agent does NOT write implementation code.
-
-2. **Phase B — Implementation (Sonnet or default)**: Spawn a `/develop` agent on
-   the same branch. It finds the failing tests and implements until they pass.
-
-The orchestrator manages this sequence:
-```
-# Phase A: test agent writes tests
-Agent(isolation="worktree", description="write tests for #{N}", prompt="...")
-# Wait for completion, merge tests to bot/issue-{N}
-
-# Phase B: develop agent implements
-Agent(isolation="worktree", description="develop issue #{N}", prompt="...branch already has failing tests...")
-# Wait for completion
-
-# Phase C (optional): security fixup
-# Orchestrator reads TRACE security findings from Phase B
-# If non-trivial findings exist: spawn a focused fixup agent
-Agent(isolation="worktree", description="security fixup #{N}", prompt="...address findings from TRACE...")
+- Max 3 cycles; deadline {unix_timestamp, now + 3600}
+- Stay in scope; minimal changes; follow existing patterns
 ```
 
-### Phase C: Security-informed fixup (optional)
+The phases, done-when criteria, and result format live in the agent.
 
-After Phase B completes, the orchestrator checks the TRACE for security findings:
-```bash
-cat .traces/trace-issue-{N}-*/logs/security-findings.md 2>/dev/null
-```
+## Single vs two-phase TDD
 
-If findings exist that the agent flagged as "real but not trivially fixable":
-1. Spawn a focused fixup agent on the same branch
-2. The prompt includes the specific findings and the project's security context
-3. The agent addresses what it can and logs remaining items to the TRACE
-4. Findings that require architectural discussion get filed as issues
+| Issue | Approach |
+|-------|----------|
+| Bug fix with clear repro, small feature, refactor | Single phase: `devloop:develop` writes tests and code |
+| Non-obvious edge cases, protocol or state-machine changes | Two phase: `devloop:test-writer` (mode `red`, branch `bot/issue-{N}`, no PR), then `devloop:develop` on the same branch |
+| Ambiguous acceptance criteria | `/spec-develop N` |
+| Backfill coverage only | `/write-tests` |
 
-If no findings, or all were false positives / trivially fixed: skip Phase C.
+## Spawning
 
-This fractalizes the release-time security audit (`scripts/security-audit.sh`)
-into per-PR incremental analysis. The release audit becomes a cross-cutting
-review of accumulated TRACE findings rather than a cold-start scan.
-
-### Single-phase TDD (for simple issues)
-
-For bug fixes with clear repro, small features, or refactors — a single develop
-agent handles both test writing and implementation per `.claude/agents/develop.md`:
-
-1. **Phase 0 — First-order analysis**: Classify the issue (bug fix / feature / refactor),
-   assess TDD viability (deterministic / smoketest-only / needs-decomposition),
-   identify existing tests affected and new tests needed.
-
-2. **Phase 1 — Write tests first**: Before any implementation code, write the test
-   harness. For bugs: a test that reproduces the failure. For features: a smoketest
-   (feature accessible) + behavior tests. Run to establish the "red" baseline.
-
-### Decision rule
-
-| Issue complexity | Test design difficulty | Approach |
-|-----------------|----------------------|----------|
-| Simple bug fix with clear repro | Low | Single-phase (Sonnet) |
-| Feature with obvious spec | Low | Single-phase (Sonnet) |
-| Feature with non-obvious edge cases | High | Two-phase (Opus tests → Sonnet impl) |
-| Protocol/state machine changes | High | Two-phase |
-| Test backfill for existing code | N/A | `/write-tests` only (no impl needed) |
-
-3. **Phase 2 — Code until tests pass**: Implement, then verify new tests go from
-   fail→pass and existing tests stay green. Merge from main each cycle.
-
-### Done-when criteria (all must be true):
-- Existing tests updated where behavior changed
-- New tests added that went from fail→pass
-- Smoketest exists for feature accessibility
-- Fast gate passes (`scripts/test-fast-gate.sh`)
-
-### Valuable failures:
-An agent that aborts with code + failing tests is still useful. The branch shows
-the attempted approach and the tests document the expected behavior. Push the branch
-and report the failure — the user can review and provide guidance.
-
-## TRACE Requirement
-
-Develop agents MUST initialize a TRACE via `scripts/trace-init.sh "issue-{N}-{slug}"`
-before starting work. The orchestrator validates that a trace directory exists in
-`.traces/` before accepting a PR. Traces capture strategy pivots, failure reasons,
-and knowledge seeds — they are how the project learns from bot work.
-
-- TRACE initialization is part of the Setup phase (see `.claude/agents/develop.md`)
-- Pivots are logged in `strategy/pivot_N.md` when approach changes between cycles
-- `TRACE.md` is populated on both success AND failure — failure traces are especially valuable
-- TRACE is part of done-when criteria: a PR without a populated TRACE is not integration-ready
-
-## Verify
-scripts/test-fast-gate.sh
-```
-
-## Spawning agents
-
-Use the Agent tool with:
-- `subagent_type: "general-purpose"` (custom types are broken — see `.claude/rules/agents.md`)
-- `isolation: "worktree"` **(MANDATORY — never omit)**
-- `run_in_background: true` for batch mode (2nd+ agent)
-- Model: omit for default (inherits parent). See "Model Selection" above.
-
-**Why worktree isolation is non-negotiable:** Without it, agents share the working tree.
-Uncommitted changes from one agent contaminate others and the main session. This caused
-type errors in `container-ctl.sh ensure` when partial edits leaked into a build (2026-03-16).
-The earlier Edit/Write permission failures that motivated dropping isolation have been
-fixed by adding permissions to `~/.claude/settings.json` (user-level, survives branch
-switches). If worktree agents fail on permissions, fix the settings — do NOT remove isolation.
-
-Read `.claude/agents/develop.md` for the prompt content to inline.
-
-**Parallel limit: max 4 agents simultaneously.** If batch has >4 issues, queue the rest.
-Wait for a slot to free up before spawning the next.
-
-Single issue mode: run in foreground (not background), show results directly.
-
-Example:
 ```
 Agent(
-  subagent_type="general-purpose",
+  subagent_type="devloop:develop",
   isolation="worktree",
-  description="develop issue 16",
-  prompt="<develop.md prompt content>\n\nIssue #16: auto-populate profile name...\n\n## Issue body\n..."
+  run_in_background=<true in batch mode>,
+  description="Develop: issue 16",
+  prompt="<agent prompt above>"
 )
 ```
 
-## Handling results
+Parallel limit: 4. Queue the rest and spawn as slots free.
 
-The develop agent writes a structured result to stdout starting with `DEVELOP_RESULT:`.
+## Results
 
-### On PASS:
-1. Report to user: "Issue #{N}: PR opened at {url}. Cycles: {count}/3."
-2. No failure summary needed.
+Agents print a `DEVELOP_RESULT:` block.
 
-### On FAIL:
-1. Parse the failure output (FAILURE_TYPE, SUMMARY, LAST_ERROR, FILES_TOUCHED)
-2. Append to bot-attempts.md:
-   ```markdown
-   ## Issue #{N} — {title}
-   ### Attempt {attempt_number} ({date})
-   - Branch: bot/issue-{N}
-   - Result: FAIL — {failure_type}
-   - Cycles: {count}/3
-   - Wall clock: {elapsed}s
-   - Files touched: {files}
-   - Summary: {summary}
-   - Last error: {last_error}
-   ```
-3. Report to user: "Issue #{N}: FAILED after {count} cycles. {failure_type}: {summary}"
-
-### On TIMEOUT:
-Same as FAIL but note the timeout explicitly. The agent may have partial work on the branch.
-
-## Batch mode workflow
-
-For `/develop 3,9,16`:
-
-1. Run pre-flight for all three issues (parallel gh calls)
-2. Read bot-attempts.md once
-3. Compose prompts for all three
-4. Spawn agent for #3 and #9 (parallel, both in background)
-5. Wait for either to complete
-6. Spawn agent for #16 when a slot opens
-7. Collect all results
-8. Update bot-attempts.md with any failures
-9. Report summary table:
-   ```
-   | Issue | Result | PR | Cycles | Time |
-   |-------|--------|----|--------|------|
-   | #3    | PASS   | #X | 1/3    | 4m   |
-   | #9    | FAIL   | —  | 3/3    | 12m  |
-   | #16   | PASS   | #Y | 2/3    | 7m   |
-   ```
-
-## Label management
-
-After all agents complete:
-- PASS: apply `bot` label (if not already present)
-- FAIL: apply `divergence` label, remove `bot` if present
-  ```bash
-  scripts/gh-ops.sh labels {N} --add divergence --rm bot
+- PASS: report "Issue #{N}: PR {url}, cycles {count}/3." Ensure the `bot` label.
+- FAIL or TIMEOUT: append to `memory/bot-attempts.md`:
+  ```markdown
+  ## Issue #{N}: {title}
+  ### Attempt {n} ({date})
+  - Branch: bot/issue-{N}
+  - Result: FAIL ({failure_type})
+  - Cycles: {count}/3, wall clock {elapsed}s
+  - Files touched: {files}
+  - Summary: {summary}
+  - Last error: {last_error}
   ```
+  Then `${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh labels {N} --add divergence --rm bot` and report the failure.
+- No structured output: treat as FAIL, type `unknown`.
 
-## Edge cases
-
-- Issue has no body → refuse, ask user to add scope first
-- Issue is closed → skip with message
-- Branch exists with uncommitted work → agent handles this (merges from main)
-- gh CLI rate limited → report and retry after delay
-- Agent returns no structured output → treat as FAIL with "unknown" failure type
+Batch mode ends with a table: `| Issue | Result | PR | Cycles | Time |`.

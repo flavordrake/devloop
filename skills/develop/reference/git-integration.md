@@ -1,94 +1,42 @@
-# Git Integration & Merge Strategy
+# Git Integration
 
-## Branch Naming
-- Develop agent branches: `bot/issue-{N}` (e.g., `bot/issue-16`)
-- One branch per issue, force-pushed on retry
+## Branches
+- Develop agent branches: `bot/issue-{N}`. One branch per issue; a retry continues
+  the same branch with new commits (never force-push).
 
-## Merge from Main — Do It Often
-The #1 cause of integration pain is drift from main. Merge early, merge often.
-
-### When to merge from main
-- **Before starting work** — always start from current main
-- **Before running tests** — ensures you're testing against latest
-- **After each implementation cycle** — catch conflicts early
-- **Before pushing** — minimize delta for reviewers
-
-### How to merge
+## Merge from the default branch often
+Drift is the main cause of integration pain. Merge before starting, before running
+tests, after each cycle, and before pushing:
 ```bash
 git fetch origin main
 git merge origin/main --no-edit
 ```
-**Never rebase.** Merge commits are fine. Rebase rewrites history and causes problems
-with force-push tracking.
+Never rebase; merge commits are fine.
 
-### Handling merge conflicts
-1. Check which files conflict: `git diff --name-only --diff-filter=U`
-2. If conflict is in YOUR files: resolve manually, keeping both your changes and main's
-3. If conflict is in files you didn't touch: you have a scope problem — report in failure summary
-4. After resolving: `git add <resolved-files> && git commit --no-edit`
+Conflicts: `git diff --name-only --diff-filter=U`. Resolve conflicts in your files,
+keeping both sides' intent. Conflicts in files you did not touch mean a scope
+problem; report it. Stuck: `git merge --abort`, read `git show origin/main:<file>`,
+retry.
 
-## Commit Messages
-```
-fix: description of what was fixed (#N)
-feat: description of what was added (#N)
-chore: non-functional change (#N)
-```
-- Reference the issue number with `(#N)` in the commit message
-- Keep the first line under 72 characters
-- One commit per implementation cycle is fine (squash on merge)
+## Commits
+- `fix:` / `feat:` / `chore:` prefix, issue reference `(#N)`, first line under 72 chars.
+- One commit per cycle is fine; PRs squash or merge per repo convention.
 
-## PR Creation
-Write body to temp file, then create via gh-ops.sh:
-```bash
-# Write PR body to /tmp/pr-body-{N}.md, then:
-scripts/gh-ops.sh pr-create --head bot/issue-{N} --title "Issue title" --body-file /tmp/pr-body-{N}.md --label bot
-```
-- `Closes #N` auto-closes the issue on merge
-- Always include test results in PR body
-- Keep PR focused — one issue, one PR
+## PRs
+- Body from a temp file, created via `${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh pr-create`.
+- `Closes #N`, gate results included, one issue per PR.
 
-## Keeping Diffs Small
-| Metric | Target | Warning |
-|---|---|---|
-| Lines changed | < 100 | > 200 = over-engineering |
-| Files changed | <= 3 | > 5 = scope creep |
-| New files | 0-1 | > 2 = wrong abstraction |
+## Keep diffs small
+Size thresholds live in `${CLAUDE_PLUGIN_ROOT}/rules/decomposition.md`.
+Change the minimum that satisfies the acceptance criteria. Don't refactor adjacent
+code, annotate unchanged code, or handle impossible cases. Inline a helper unless
+it is used 3+ times.
 
-### Strategies for small diffs
-- Change the minimum needed to satisfy acceptance criteria
-- Don't refactor adjacent code
-- Don't add comments/docstrings to unchanged code
-- Don't "improve" types that already work
-- Don't add error handling for impossible cases
-- If you need a helper, inline it unless it's used 3+ times
+## Pre-push
+1. Merge from the default branch.
+2. Run the `fast` gate.
+3. Review `git diff --stat origin/main`; over the decomposition thresholds, reconsider scope.
 
-## Pre-Push Checklist
-1. `git fetch origin main && git merge origin/main --no-edit`
-2. `npx tsc --noEmit` — type check
-3. `npx eslint src/ public/ server/ tests/` — lint
-4. `npx vitest run` — unit tests
-5. `git diff --stat origin/main` — review your delta
-6. If delta > 200 lines or > 5 files, reconsider scope
-
-## Recovery Patterns
-
-### Stuck on merge conflict
-```bash
-git merge --abort   # Undo the merge attempt
-# Re-read the conflicting file on main to understand what changed
-git show origin/main:path/to/file
-# Try again with understanding
-```
-
-### Accidentally committed to wrong branch
-```bash
-git stash
-git checkout bot/issue-{N}
-git stash pop
-```
-
-### Tests pass locally but fail in CI
-- Check Node version (CI uses 20, local may differ)
-- Check if `npx tsc` was run (compiled JS may be stale)
-- Check if test depends on server being running
-- Check Playwright browser versions (`npx playwright install`)
+## Passes locally, fails in CI
+Compare toolchain versions, generated or compiled artifacts, and services the tests
+assume are running. CI's environment is defined by the repo's workflow files.

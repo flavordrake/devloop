@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/trace-session-start.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/trace-session-start.sh\""
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/trace-pre-compact.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/trace-pre-compact.sh\""
           }
         ]
       }
@@ -28,51 +28,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/enforce-hygiene.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/enforce-hygiene.sh\""
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/trace-signal.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/trace-signal.sh"
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/trace-checkpoint.sh"
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/trace-gh-ops.sh"
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/trace-agent-spawn.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/trace-checkpoint.sh\""
           }
         ]
       }

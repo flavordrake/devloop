@@ -1,13 +1,13 @@
 #!/bin/bash
-# SessionStart hook — check TRACE status on session start/resume/clear.
-# Calls the general-purpose trace-checkpoint script.
+# SessionStart hook — TRACE status on session start/resume/clear.
+# Silent when no trace is active.
 
 INPUT=$(cat)
-CWD=$(echo "$INPUT" | jq -r '.cwd // "."')
-cd "$CWD" 2>/dev/null || true
+CWD=$(jq -r '.cwd // "."' <<<"$INPUT")
+cd "$CWD" || exit 0
 
-SCRIPT_DIR="$(dirname "$0")/../scripts"
-CTX=$("$SCRIPT_DIR/trace-checkpoint.sh" "session-start" 2>/dev/null || echo "TRACE (session-start): status unavailable")
+CTX=$("$(dirname "$0")/../scripts/trace-checkpoint.sh" session-start)
+[ -n "$CTX" ] || exit 0
 
 jq -n --arg ctx "$CTX" '{
   hookSpecificOutput: {

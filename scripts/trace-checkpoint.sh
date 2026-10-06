@@ -1,121 +1,50 @@
 #!/usr/bin/env bash
-# scripts/trace-checkpoint.sh — Emit TRACE one-line status and prompt update
+# scripts/trace-checkpoint.sh — Emit a one-line status for the active TRACE.
 #
-# General-purpose trace checkpoint. Call from:
-#   - Hooks (PostToolUse, PreCompact, SessionStart)
-#   - Agent prompts (before/after key decisions)
-#   - Manual invocation (scripts/trace-checkpoint.sh [trigger-label])
+# Called by the SessionStart, PreCompact and post-commit hooks, or manually:
+#   scripts/trace-checkpoint.sh [trigger-label]
 #
-# Usage:
-#   scripts/trace-checkpoint.sh                  # auto-detect from CWD
-#   scripts/trace-checkpoint.sh commit           # label the checkpoint
-#   scripts/trace-checkpoint.sh deploy           # label the checkpoint
-#   scripts/trace-checkpoint.sh "design decision" # any label
-#
-# Output: one-line TRACE status to stdout. If TRACE is stale or behind,
-# the message is phrased as a prompt to update.
+# Prints NOTHING when there is no active trace (no CLAUDE.md, no trace ref,
+# missing TRACE.md, or a closed trace): TRACE is opt-in.
 
 set -euo pipefail
 
 TRIGGER="${1:-checkpoint}"
 
-# grep -c prints 0 AND exits 1 on no match, so `|| echo 0` doubled the output ("0\n0").
-# Grep exception from rules/command-hygiene.md.
-count_matches() { grep -c -- "$1" "$2" 2>/dev/null || true; }
-# find_claude_md, first_trace_ref; $0-relative so it resolves from the plugin cache.
+# $0-relative so it resolves from the plugin cache.
 source "$(dirname "$0")/lib/trace-locate.sh"
 
 CLAUDE_MD=$(find_claude_md)
-
-if [ -z "$CLAUDE_MD" ]; then
-  echo "TRACE: no CLAUDE.md found — no active trace"
-  exit 0
-fi
-
+[ -n "$CLAUDE_MD" ] || exit 0
 REPO_ROOT=$(dirname "$CLAUDE_MD")
 TRACE_REL=$(first_trace_ref "$CLAUDE_MD")
-
-if [ -z "$TRACE_REL" ]; then
-  echo "TRACE: no active trace in CLAUDE.md — init with scripts/trace-init.sh"
-  exit 0
-fi
-
+[ -n "$TRACE_REL" ] || exit 0
 TRACE_PATH="$REPO_ROOT/$TRACE_REL"
-
-if [ ! -d "$TRACE_PATH" ]; then
-  echo "TRACE: directory $TRACE_REL not found — init with scripts/trace-init.sh"
+TRACE_MD="$TRACE_PATH/TRACE.md"
+[ -f "$TRACE_MD" ] || exit 0
+if trace_closed "$TRACE_MD"; then
   exit 0
 fi
 
-# Gather metrics
-TRACE_MD="$TRACE_PATH/TRACE.md"
-TRACE_AGE_MIN=0
-COMMIT_COUNT=0
-AGENT_COUNT=0
-STATUS="unknown"
+TRACE_AGE=$(( $(date +%s) - $(file_mtime "$TRACE_MD") ))
+TRACE_AGE_MIN=$(( TRACE_AGE / 60 ))
+# Relative --since avoids GNU-only `date -d`. Process substitution: a non-repo
+# git failure must not trip pipefail/set -e.
+COMMIT_COUNT=$(count_matches . <(git -C "$REPO_ROOT" log --oneline --since="${TRACE_AGE} seconds ago" 2>/dev/null))
 
-if [ -f "$TRACE_MD" ]; then
-  TRACE_MTIME=$(stat -c %Y "$TRACE_MD" 2>/dev/null || echo 0)
-  TRACE_AGE=$(( $(date +%s) - TRACE_MTIME ))
-  TRACE_AGE_MIN=$(( TRACE_AGE / 60 ))
-
-  ISO_SINCE=$(date -d "@$TRACE_MTIME" --iso-8601=seconds 2>/dev/null || echo '1 hour ago')
-  # Process substitution: a non-repo git failure must not trip pipefail/set -e.
-  COMMIT_COUNT=$(count_matches . <(git -C "$REPO_ROOT" log --oneline --since="$ISO_SINCE" 2>/dev/null))
-
-  if grep -q "<!-- Post-mortem" "$TRACE_MD" 2>/dev/null; then
-    STATUS="BOILERPLATE"
-  elif grep -qP '^status:\s+(success|failed)' "$TRACE_MD" 2>/dev/null; then
-    STATUS="CLOSED"
-  elif [ "$TRACE_AGE_MIN" -gt 60 ]; then
-    STATUS="STALE"
-  else
-    STATUS="current"
-  fi
-else
-  STATUS="MISSING"
-fi
-
-AGENT_LOG="$TRACE_PATH/logs/agents.log"
-if [ -f "$AGENT_LOG" ]; then
-  AGENT_COUNT=$(count_matches "agent-spawn" "$AGENT_LOG")
-fi
-
-# Count decisions: pivots + gh-ops entries
-DECISION_COUNT=0
-# nullglob array instead of `ls | wc -l`, which had the same doubled-0 shape with no pivots.
+# nullglob array instead of `ls | wc -l`, which doubled the 0 with no pivots.
 shopt -s nullglob
 PIVOTS=("$TRACE_PATH"/strategy/pivot_*.md)
 shopt -u nullglob
-PIVOT_COUNT=${#PIVOTS[@]}
-GH_OPS_LOG="$TRACE_PATH/logs/gh-ops.log"
-GH_OPS_COUNT=0
-if [ -f "$GH_OPS_LOG" ]; then
-  GH_OPS_COUNT=$(count_matches "^\[" "$GH_OPS_LOG")
-fi
-DECISION_COUNT=$((PIVOT_COUNT + GH_OPS_COUNT + COMMIT_COUNT))
 
-# Build one-liner with escalating severity
-# Level 0: quiet status (no action needed)
-# Level 1: drift warning (update soon)
-# Level 2: stale (must update before proceeding)
-LEVEL=0
-if [ "$STATUS" = "STALE" ] || [ "$STATUS" = "BOILERPLATE" ] || [ "$STATUS" = "CLOSED" ] || [ "$STATUS" = "MISSING" ]; then
-  LEVEL=2
-elif [ "$COMMIT_COUNT" -gt 5 ]; then
-  LEVEL=2
+# Commits are reported once, not also summed into a "decisions" total.
+STATUS_LINE="TRACE ($TRIGGER): ${#PIVOTS[@]} pivots, ${COMMIT_COUNT} commits since last update ${TRACE_AGE_MIN}m ago"
+
+# Escalation: stale (>60m or >5 commits), drift (>2 commits and >30m), quiet.
+if [ "$TRACE_AGE_MIN" -gt 60 ] || [ "$COMMIT_COUNT" -gt 5 ]; then
+  echo "$STATUS_LINE [STALE] — update TRACE.md now."
 elif [ "$COMMIT_COUNT" -gt 2 ] && [ "$TRACE_AGE_MIN" -gt 30 ]; then
-  LEVEL=1
+  echo "$STATUS_LINE — update TRACE before next commit"
+else
+  echo "$STATUS_LINE"
 fi
-
-case "$LEVEL" in
-  0)
-    echo "TRACE ($TRIGGER): ${DECISION_COUNT} decisions, ${COMMIT_COUNT} commits, ${AGENT_COUNT} agents since last update ${TRACE_AGE_MIN}m ago"
-    ;;
-  1)
-    echo "TRACE ($TRIGGER): ${DECISION_COUNT} decisions, ${COMMIT_COUNT} commits since last update ${TRACE_AGE_MIN}m ago — update TRACE before next commit"
-    ;;
-  2)
-    echo "TRACE ($TRIGGER): ${DECISION_COUNT} decisions, ${COMMIT_COUNT} commits since last update ${TRACE_AGE_MIN}m ago [$STATUS] — STOP and update TRACE.md now."
-    ;;
-esac

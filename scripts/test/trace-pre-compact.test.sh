@@ -52,6 +52,24 @@ else
   fail "own-trace-write: no snapshot in own trace"
 fi
 
+# 3. Closed trace: no snapshot.
+make_repo "$DEVLOOP_TEST_TMP/closed"
+echo "status: success" > "$DEVLOOP_TEST_TMP/closed/.traces/trace-fixture/TRACE.md"
+run_hook "$DEVLOOP_TEST_TMP/closed"
+if [ "$(snapshot_count "$DEVLOOP_TEST_TMP/closed")" -eq 0 ]; then
+  pass closed-no-write
+else
+  fail "closed-no-write: snapshot written into closed trace"
+fi
+
+# 4. No CLAUDE.md: no output on stdout or stderr.
+out=$(jq -n --arg cwd "$DEVLOOP_TEST_TMP/scratch" '{hook_event_name: "PreCompact", cwd: $cwd}' | "$HOOK" 2>&1)
+if [ -z "$out" ]; then
+  pass no-trace-silent
+else
+  fail "no-trace-silent: $out"
+fi
+
 if [ "$FAILS" -ne 0 ]; then
   echo "$FAILS case(s) failed"
   exit 1

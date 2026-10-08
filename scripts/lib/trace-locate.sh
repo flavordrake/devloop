@@ -7,8 +7,19 @@
 #
 # Portable grep/stat only: these also run on the Mac build host (no grep -P, stat -c, date -d).
 
-# Grep exception from rules/command-hygiene.md: no match is a normal empty result.
-first_trace_ref() { grep -m1 -oE '\.traces/trace-[^[:space:]`/]+/' "$1" 2>/dev/null || true; }
+# first_trace_ref CLAUDE_MD — the first trace dir token in the file, with a
+# trailing slash. The Active TRACE line may be prose naming several arcs (mobissh
+# writes one); extra words and a missing trailing slash are fine, the first
+# path-like token wins. Grep exception from rules/command-hygiene.md: no match
+# is a normal empty result.
+first_trace_ref() {
+  local ref
+  ref=$(grep -m1 -oE '\.traces/trace-[A-Za-z0-9._-]+/?' "$1" 2>/dev/null | head -n1 || true)
+  if [ -n "$ref" ]; then echo "${ref%/}/"; fi
+}
+
+# has_active_trace_line CLAUDE_MD — an Active TRACE line is present (any content).
+has_active_trace_line() { grep -q '^> \*\*Active TRACE\*\*' "$1" 2>/dev/null; }
 
 # grep -c prints 0 AND exits 1 on no match; `|| true` keeps the single "0".
 count_matches() { grep -c -- "$1" "$2" 2>/dev/null || true; }

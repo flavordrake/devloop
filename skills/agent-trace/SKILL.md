@@ -21,7 +21,9 @@ and work likely to fail informatively. Skip it for routine changes.
 Run from anywhere inside the project. It creates
 `.traces/trace-{slug}-{timestamp}/` at the project root (next to `CLAUDE.md`) and
 writes an `> **Active TRACE**: \`.traces/trace-.../\`` line into the project
-`CLAUDE.md`, replacing any previous one. That line is what activates the hooks.
+`CLAUDE.md`. It refuses when one is already present; `--force` replaces it. That
+line is what activates the hooks; it may carry prose and several trace paths
+(a multi-arc session), the first `.traces/trace-*` token is the active one.
 Keep `.traces/` gitignored: TRACEs are local artifacts, their harvested insights
 are what persist.
 

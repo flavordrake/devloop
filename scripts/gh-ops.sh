@@ -24,7 +24,11 @@
 #   integrate PR_NUM ISSUE_NUM [--merge|--squash|--rebase]  Merge PR, close issue, update local base
 #   delegate  ISSUE_NUM [--label L ...]   Label bot, audit comment, prune stale refs
 #   fetch-issues N1,N2,N3 [--out FILE]   Print issue bodies (stdout, or FILE)
-#   release TAG --title T [--notes-file F] [--target SHA] [ASSET ...]  Create a GitHub release (+ tag) with optional assets
+#   release TAG --title T [--notes-file F] [--target SHA] [--prerelease] [ASSET ...]  Create a GitHub release (+ tag) with optional assets
+#
+# integrate runs the repo's `post-integrate: <command>` from AGENTS.md
+# `## Project` (if declared) from the repo root after a successful merge and
+# reports its exit code without failing.
 #
 # Acts on the repo of the caller's cwd, also when symlinked into a project or
 # run from the plugin cache. All progress goes to stderr, actionable output to
@@ -120,6 +124,18 @@ _update_local_branch() {
       echo "warning: local ${branch} did not fast-forward; it may be stale" >&2
     fi
   fi
+}
+
+# _project_setting KEY — value of `- KEY: value` under AGENTS.md `## Project`
+# in the caller's repo (backticks stripped); empty when absent.
+_project_setting() {
+  [ -n "$WORKTREE_ROOT" ] && [ -f "$WORKTREE_ROOT/AGENTS.md" ] || return 0
+  awk -v k="$1" '
+    /^## / { on = ($0 ~ /^## +Project[[:space:]]*$/); next }
+    on && $0 ~ ("^[-*] +" k ":") {
+      v = $0; sub(/^[-*] +[a-z-]+:[[:space:]]*/, "", v); gsub(/`/, "", v); sub(/[[:space:]]+$/, "", v)
+      print v; exit
+    }' "$WORKTREE_ROOT/AGENTS.md"
 }
 
 case "$CMD" in
@@ -481,6 +497,21 @@ case "$CMD" in
     git remote prune origin
 
     echo "+ Integrated: PR #${PR_NUM} (issue #${ISSUE_NUM})" >&2
+
+    # Step 5: repo-declared post-integrate hook (AGENTS.md `## Project`,
+    # `- post-integrate: <command>`), run from the repo root. The merge is
+    # already done, so its failure is reported, not propagated.
+    POST_INTEGRATE=$(_project_setting post-integrate)
+    if [ -n "$POST_INTEGRATE" ]; then
+      echo "==> post-integrate: ${POST_INTEGRATE}" >&2
+      POST_RC=0
+      (cd "$WORKTREE_ROOT" && bash -c "$POST_INTEGRATE") || POST_RC=$?
+      if [ "$POST_RC" -eq 0 ]; then
+        echo "+ post-integrate ok" >&2
+      else
+        echo "! post-integrate FAILED (exit ${POST_RC}); integrate itself succeeded" >&2
+      fi
+    fi
     ;;
 
   delegate)
@@ -550,9 +581,11 @@ case "$CMD" in
     TITLE=""
     NOTES_FILE=""
     TARGET=""
+    PRERELEASE=0
     ASSETS=()
     while [[ $# -gt 0 ]]; do
       case $1 in
+        --prerelease) PRERELEASE=1; shift ;;
         --title) TITLE="$2"; shift 2 ;;
         --notes-file) NOTES_FILE="$2"; shift 2 ;;
         --target) TARGET="$2"; shift 2 ;;
@@ -568,6 +601,7 @@ case "$CMD" in
       REL_ARGS+=(--generate-notes)
     fi
     if [ -n "$TARGET" ]; then REL_ARGS+=(--target "$TARGET"); fi
+    if [ "$PRERELEASE" -eq 1 ]; then REL_ARGS+=(--prerelease); fi
     echo "Creating release ${TAG} (${TITLE})" >&2
     gh release create "${REL_ARGS[@]}" "${ASSETS[@]+"${ASSETS[@]}"}"
     ;;

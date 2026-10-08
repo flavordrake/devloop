@@ -50,6 +50,17 @@ run_case zero "TRACE (test): 0 pivots, 0 commits" "$DEVLOOP_TEST_TMP/zero"
 git -C "$DEVLOOP_TEST_TMP/zero" -c user.name=t -c user.email=t@t commit -q --allow-empty -m one
 run_case one-commit "TRACE (test): 0 pivots, 1 commits" "$DEVLOOP_TEST_TMP/zero"
 
+# 2b. Narrative multi-arc Active TRACE line (mobissh style): prose, no trailing
+# slash, several paths. The first trace token is the active one.
+make_repo "$DEVLOOP_TEST_TMP/multi"
+echo '> **Active TRACE**: arc 2 of the migration, .traces/trace-fixture (arc 1 was .traces/trace-old-20260101T000000/, closed); see TRACE.md' > "$DEVLOOP_TEST_TMP/multi/CLAUDE.md"
+run_case multi-arc-line "TRACE (test): 0 pivots, 0 commits" "$DEVLOOP_TEST_TMP/multi"
+source "$ROOT/scripts/lib/trace-locate.sh"
+ref=$(first_trace_ref "$DEVLOOP_TEST_TMP/multi/CLAUDE.md")
+if [ "$ref" = ".traces/trace-fixture/" ]; then pass "first_trace_ref: first token, slash normalized"; else fail "first_trace_ref: '$ref'"; fi
+ref=$(first_trace_ref "$DEVLOOP_TEST_TMP/zero/CLAUDE.md")
+if [ "$ref" = ".traces/trace-fixture/" ]; then pass "first_trace_ref: backticked path unchanged"; else fail "first_trace_ref backticked: '$ref'"; fi
+
 # 3. Unrelated child repo must not be picked up: no CLAUDE.md means silence.
 mkdir -p "$DEVLOOP_TEST_TMP/scratch"
 make_repo "$DEVLOOP_TEST_TMP/scratch/child"

@@ -91,6 +91,8 @@ expect_call "pr-view-passthrough" "pr view 3 --json state"
 
 run release v1.0.0 --title "One" a.zip
 expect_call "release-args" "release create v1.0.0 --title One --generate-notes a.zip"
+run release v1.1.0-rc1 --prerelease --title "RC"
+expect_call "release-prerelease" "release create v1.1.0-rc1 --title RC --generate-notes --prerelease"
 
 run fetch-issues 1,2
 case "$OUT" in
@@ -119,6 +121,21 @@ GH_PR_BODY="Refs #7" GH_BEHIND=2 run integrate 9 7 --squash
 expect_call "integrate-updates-branch" "pr update-branch 9"
 expect_call "integrate-squash" "pr merge 9 --squash --delete-branch"
 expect_no_call "integrate-refs-keeps-open" "issue close"
+if grep -q "post-integrate" "$T/err"; then fail "integrate-no-hook-silent"; else pass "integrate-no-hook-silent"; fi
+
+# post-integrate hook from AGENTS.md ## Project: runs from the repo root, its
+# failure is logged but does not fail the integrate.
+mkdir -p "$T/repo/scripts"
+printf '#!/usr/bin/env bash\npwd > "%s"\nexit 3\n' "$T/hook.pwd" > "$T/repo/scripts/after.sh"
+chmod +x "$T/repo/scripts/after.sh"
+printf '## Project\n- Default branch: main\n- post-integrate: `scripts/after.sh`\n\n## Gates\n- fast: true\n' > "$T/repo/AGENTS.md"
+mkdir -p "$T/repo/sub"
+: > "$GH_LOG"; RC=0
+(cd "$T/repo/sub" && GH_PR_BODY="Closes #7" "$GH_OPS" integrate 9 7 2>"$T/err") || RC=$?
+expect_rc "integrate-hook-failure-does-not-fail" 0
+if grep -q "post-integrate FAILED (exit 3)" "$T/err"; then pass "integrate-hook-exit-logged"; else fail "integrate-hook-exit-logged: $(cat "$T/err")"; fi
+if [ "$(cat "$T/hook.pwd" 2>/dev/null)" = "$T/repo" ]; then pass "integrate-hook-runs-from-root"; else fail "integrate-hook-runs-from-root: $(cat "$T/hook.pwd" 2>/dev/null)"; fi
+rm -rf "$T/repo/AGENTS.md" "$T/repo/scripts" "$T/repo/sub"
 
 # pr-merge: free local branch is deleted and gh deletes the remote one.
 g -C "$T/repo" branch feature

@@ -193,7 +193,9 @@ dp_want() { [[ -z "$KINDS" || ",${KINDS}," == *",$1,"* ]]; }
 
 # dp_subcommands <list of code files>: "tool<TAB>sub<TAB>file:line" for each
 # CLI subcommand a cheap per-stack heuristic finds. Shell: arms of
-# `case "$1"|"$cmd"|"$sub"...` (tool = script file name). Python argparse
+# `case "$1"|"$cmd"|"$sub"...` (tool = script file name); a one-line arm that
+# only forwards to another command with "$@" (`build) exec flutter "$@" ;;`)
+# is a pass-through, not this script's subcommand. Python argparse
 # add_parser / click command(name), Dart addCommand, TS/JS commander
 # .command(), Kotlin clikt name = (tool = file stem; documented by any
 # backticked mention).
@@ -211,6 +213,10 @@ dp_subcommands() {
       !fn && tolower($0) ~ /^[[:space:]]*case[[:space:]]+"?\$\{?(1|cmd|sub|subcmd|subcommand|command|action|verb)[}:" -]/ { depth = 1; next }
       depth && /^[[:space:]]*esac/ { depth--; next }
       depth == 1 && /^[[:space:]]*[a-z][a-z0-9|_-]*\)/ {
+        # One command forwarding the whole argv (no shift: an in-script
+        # `shift; do_build "$@"` dispatcher still counts).
+        body = $0; sub(/^[^)]*\)/, "", body)
+        if (body ~ /^[[:space:]]*[^;&|]*[[:space:]]"\$@"[[:space:]]*;;[[:space:]]*$/) next
         arm = $0; sub(/^[[:space:]]*/, "", arm); sub(/\).*/, "", arm)
         m = split(arm, a, "|")
         for (k = 1; k <= m; k++) if (a[k] ~ /^[a-z][a-z0-9_-]*$/) print tool "\t" a[k] "\t" FILENAME ":" FNR

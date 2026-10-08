@@ -184,6 +184,26 @@ mv "$R/README.md.new" "$R/README.md"
 run "$R" code-to-docs.sh --warn
 if grep -q 'called scripts/hook.sh' "$T/out"; then fail "sibling-repo call counted: $(cat "$T/out")"; else pass "a sibling-repo call is not a call into this repo"; fi
 
+# CLI heuristics: a one-line pass-through arm is not this script's subcommand;
+# `tool.sh {a|b}` and `tool.sh <a|b>` document (and claim) each alternative.
+R="$T/cli"; make_repo "$R"
+printf '#!/usr/bin/env bash\n# Usage: scripts/fl.sh\ncase "$1" in\n  build|test|drive) exec flutter "$@" ;;\n  run) scripts/hook.sh "$@" ;;\n  doctor) shift; do_doctor "$@" ;;\n  own) echo own ;;\nesac\n' > "$R/scripts/fl.sh"
+printf 'Wrapper `scripts/fl.sh` forwards to flutter.\n' >> "$R/README.md"
+(cd "$R" && git add -A)
+run "$R" code-to-docs.sh --warn
+if grep -qE 'cli fl\.sh (build|test|drive|run)' "$T/out"; then fail "pass-through arms counted: $(cat "$T/out")"; else pass "pass-through arms are not subcommands"; fi
+for p in '^UNDOCUMENTED cli fl\.sh doctor scripts/fl\.sh:6$' '^UNDOCUMENTED cli fl\.sh own scripts/fl\.sh:7$'; do
+  if grep -qE "$p" "$T/out"; then pass "code-to-docs $p"; else fail "code-to-docs $p: $(cat "$T/out")"; fi
+done
+printf 'Own verbs: `scripts/fl.sh {doctor|own}`.\n' >> "$R/README.md"
+expect_clean "a brace-group doc mention documents each alternative" "$R" code-to-docs.sh
+printf 'Also `scripts/build.sh <run|clean|teleport>`, `fl.sh {own|warp}`, `build.sh <verb>`.\n' >> "$R/README.md"
+if run "$R" docs-to-code.sh --block; then fail "alternative claims: exit 0, expected 1"; fi
+for p in '^MISSING cli build\.sh teleport README\.md:[0-9]+$' '^MISSING cli fl\.sh warp README\.md:[0-9]+$'; do
+  if grep -qE "$p" "$T/out"; then pass "docs-to-code $p"; else fail "docs-to-code $p: $(cat "$T/out")"; fi
+done
+if grep -qE 'MISSING cli (build\.sh (run|clean|verb)|fl\.sh (own|doctor))' "$T/out"; then fail "existing alternatives or a placeholder reported: $(cat "$T/out")"; else pass "existing alternatives resolve; a lone <verb> placeholder is not a claim"; fi
+
 # Modes, and a GIT_DIR inherited from a hook must not redirect the file list.
 R="$T/modes"; make_repo "$R"
 printf 'Run `scripts/ghost.sh`.\n' >> "$R/README.md"

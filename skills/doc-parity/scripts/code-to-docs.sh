@@ -112,7 +112,7 @@ surfaces() {
 surfaces | awk -F'\t' '$1 != "env" || $2 !~ /^(HOME|PATH|USER|TMPDIR|PWD|SHELL|TERM|LANG|CI|EDITOR|PAGER|HOSTNAME|ANDROID_HOME|ANDROID_SDK_ROOT|JAVA_HOME|APKSIGNER|PUB_CACHE|FLUTTER_ROOT|PYTHONPATH|VIRTUAL_ENV|NODE_ENV|(CLAUDE|GITHUB|RUNNER|XDG|LC|CARGO)_.*)$/' > "$WORK/surfaces"
 
 # What the docs name: path-ish tokens (and their file names), words, backtick
-# words, and `tool.sh sub` pairs.
+# words, and `tool.sh sub` pairs (`tool.sh {a|b}` and `tool.sh <a|b>` name each alternative).
 if [[ -s "$WORK/docs" ]]; then tr '\n' '\0' < "$WORK/docs" | xargs -0 cat > "$WORK/blob"; else : > "$WORK/blob"; fi
 dp_ignores > "$WORK/ignores"
 dp_ignore_check > "$WORK/findings"
@@ -133,6 +133,9 @@ awk -F'\t' -v kinds="$KINDS" -v countfile="$WORK/checked" "$DP_AWK_GLOB"'
     rest = $0; while (match(rest, /`[^`]+`/)) { s = substr(rest, RSTART + 1, RLENGTH - 2); rest = substr(rest, RSTART + RLENGTH)
       while (match(s, /[A-Za-z0-9_-]+/)) { bw[substr(s, RSTART, RLENGTH)] = 1; s = substr(s, RSTART + RLENGTH) } }
     rest = $0; while (match(rest, /[A-Za-z0-9_-]+\.(sh|bash) +[a-z][a-z0-9_-]*/)) { p = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH); gsub(/ +/, " ", p); pair[p] = 1 }
+    rest = $0; while (match(rest, /[A-Za-z0-9_-]+\.(sh|bash) +[{<][a-z][a-z0-9_\\-]*([|][a-z][a-z0-9_\\-]*)+[}>]/)) { p = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
+      t = p; sub(/ .*/, "", t); sub(/^[^{<]*[{<]/, "", p); sub(/[}>]$/, "", p); gsub(/\\/, "", p)
+      m = split(p, alts, "|"); for (k = 1; k <= m; k++) pair[t " " alts[k]] = 1 }
     next
   }
   FILENAME == ARGV[2] { ign[++ni] = $0; next }

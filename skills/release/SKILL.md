@@ -71,8 +71,8 @@ For each issue referenced in the changelog that is still open and fully fixed:
 ${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh close N --comment "Fixed in v{VERSION} ({SHA})"
 ${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh labels N --rm bot --rm divergence --add "v{VERSION}"
 ```
-`gh-ops.sh labels` cannot create labels, so create the version label once first
-(no wrapper exists for this): `gh label create "v{VERSION}" --color 0E8A16`.
+`gh-ops.sh labels` cannot create labels, so create the version label once first:
+`${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh label-create "v{VERSION}" --color 0E8A16`.
 Partially fixed issues stay open with a progress comment.
 
 ## 9. Push and publish
@@ -83,7 +83,8 @@ Then:
 git push origin main --follow-tags
 ${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh release "v{VERSION}" --notes-file <changelog file>
 ```
-If AGENTS.md declares a post-release deploy or verification step, run it.
+Add `--prerelease` for an rc or beta tag. If AGENTS.md declares a post-release
+deploy or verification step, run it.
 
 ## TRACE
 

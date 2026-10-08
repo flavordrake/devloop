@@ -28,7 +28,7 @@ immediately; the user invoked `/develop` to get work done, not to pick from a me
 ## Pre-flight (per issue)
 
 1. Issue exists, is open, and has a body: `${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh fetch-issues {N}`. No body: ask the user to add scope.
-2. Open PR on `bot/issue-{N}`: `${CLAUDE_PLUGIN_ROOT}/scripts/gh-ops.sh search "head:bot/issue-{N}"`. If one exists, ask: resume on that branch, or skip?
+2. Existing branch: `git ls-remote --heads origin 'bot/issue-{N}*'` (`gh-ops.sh search` lists issues, not branches). If one exists, ask: resume on that branch, or skip?
 3. Prior failures in `memory/bot-attempts.md`.
 4. Files in scope from the issue body; if missing, read likely source files and keep scope narrow.
 

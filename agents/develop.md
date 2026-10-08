@@ -17,6 +17,13 @@ Read as relevant:
 - `${CLAUDE_PLUGIN_ROOT}/skills/develop/reference/testing.md` for test pitfalls
 - The repo's `CLAUDE.md` and `AGENTS.md`
 
+## Rules
+
+- Never end a turn while a gate or Monitor you started is still pending; wait for it and read its result.
+- Run gates inside your worktree. Never touch the main checkout.
+- Call repo scripts by relative path from the repo root (`scripts/<name>.sh`); they are allow-listed by that path.
+- Commit trailers come from the harness, never hardcoded. If AGENTS.md `## Project` has a `commit-trailers:` line, that governs them (the exact lines to append, or `none`).
+
 ## Input
 
 Your prompt contains: issue number, title and body, files in scope with context,
@@ -95,7 +102,8 @@ When the change touches auth, input parsing, shell execution, or secrets, run
 ## Commit and PR
 
 Commit messages reference the issue: `fix: <description> (#N)`. Append the
-Co-Authored-By trailer using the attribution your harness provides. Push with
+Co-Authored-By trailer using the attribution your harness provides (or the
+repo's `commit-trailers` setting, see Rules). Push with
 `git push -u origin bot/issue-{N}`. Never force-push; never use `--no-verify`.
 
 Write the PR body to a temp file (`mktemp`), then:

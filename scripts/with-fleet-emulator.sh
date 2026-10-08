@@ -15,10 +15,12 @@
 #
 # Usage: with-fleet-emulator.sh -- <command...>
 #
-# Env:
-#   EMU_HOST           ssh target holding the lease (default emu@android-emulator.<tailnet>)
+# Env (lease side):
+#   EMU_HOST           ssh target holding the lease (default emu@android-emulator.<tailnet>);
+#                      alias EMU_LEASE_HOST (mobissh's name)
 #   EMU_TAILNET        MagicDNS suffix (default: from `tailscale status`); empty = short names
-#   EMU_ADB            adb endpoint exported to the child (default android-emulator.<tailnet>:5556)
+#   EMU_ADB            adb endpoint exported to the child (default android-emulator.<tailnet>:5556);
+#                      alias EMU_ADB_ENDPOINT (mobissh's name)
 #   EMU_CAPTOKEN       pre-minted capability token (default: hub acquire)
 #   EMU_LEASE_WAIT     seconds to wait for a busy lease (default 900)
 #   EMU_LEASE_MAXHOLD  seconds before the lease auto-releases (default 7200; the
@@ -26,6 +28,13 @@
 #   EMU_REPO           repo path on the emulator host (default /opt/android-emulator)
 #   EMU_LEASE          lease file on the emulator host
 #   EMU_LOG_DIR        where the remote ensure/boot output goes
+#
+# Consumer knobs, passed through only when set:
+#   EMU_CONTAINER, EMU_ENSURE   to the remote `emu-ctl.sh ensure` env and the child
+#   ADB_MODE, EMU_ADBD_ENDPOINT to the child
+#
+# Exported to the child command: EMU_ADB, EMU_ADBD_ENDPOINT (defaults to EMU_ADB
+# when the consumer did not set it), plus any of the knobs above that are set.
 set -euo pipefail
 
 # Full tailnet names: known_hosts pins the FQDN, not the MagicDNS short name.
@@ -37,8 +46,8 @@ tailnet_suffix() {
 }
 EMU_TAILNET="${EMU_TAILNET-$(tailnet_suffix)}" # set-but-empty means short names
 EMU_FQDN="android-emulator${EMU_TAILNET:+.$EMU_TAILNET}"
-EMU_HOST="${EMU_HOST:-emu@$EMU_FQDN}"
-EMU_ADB="${EMU_ADB:-$EMU_FQDN:5556}"
+EMU_HOST="${EMU_HOST:-${EMU_LEASE_HOST:-emu@$EMU_FQDN}}"
+EMU_ADB="${EMU_ADB:-${EMU_ADB_ENDPOINT:-$EMU_FQDN:5556}}"
 EMU_LEASE_WAIT="${EMU_LEASE_WAIT:-900}"
 EMU_LEASE_MAXHOLD="${EMU_LEASE_MAXHOLD:-7200}"
 EMU_REPO="${EMU_REPO:-/opt/android-emulator}"
@@ -73,7 +82,13 @@ fi
 # pty makes the remote side get SIGHUP (and release) when we disconnect.
 sentinel="$(mktemp -u "${TMPDIR:-/tmp}/fleet-emulator.XXXXXX")"
 mkfifo "$sentinel"
-remote_cmd="RELAYGENT_CAPTOKEN=${captoken} flock -w ${EMU_LEASE_WAIT} -x ${LEASE} bash -c '
+# Consumer knobs the remote ensure honors ride along as env on the flock command.
+# ${!v} indirection, not an associative array: macOS bash 3.2.
+remote_env="RELAYGENT_CAPTOKEN=${captoken}"
+for v in EMU_CONTAINER EMU_ENSURE; do
+  if [[ -n "${!v:-}" ]]; then remote_env="${remote_env} ${v}=${!v}"; fi
+done
+remote_cmd="${remote_env} flock -w ${EMU_LEASE_WAIT} -x ${LEASE} bash -c '
   ${EMU_REPO}/scripts/emu-ctl.sh ensure 2>&1 || { echo ENSURE_FAILED; exit 1; }
   echo READY
   sleep ${EMU_LEASE_MAXHOLD}'"
@@ -135,7 +150,10 @@ fi
 
 log "lease held + device booted after $(( $(date +%s) - wait_start ))s; adb endpoint ${EMU_ADB}"
 export EMU_ADB
-export EMU_ADBD_ENDPOINT="$EMU_ADB"
+export EMU_ADBD_ENDPOINT="${EMU_ADBD_ENDPOINT:-$EMU_ADB}"
+for v in EMU_CONTAINER EMU_ENSURE ADB_MODE; do
+  if [[ -n "${!v:-}" ]]; then export "$v"; fi
+done
 
 hold_start=$(date +%s)
 set +e

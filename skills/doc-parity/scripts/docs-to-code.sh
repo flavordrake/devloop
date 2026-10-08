@@ -7,7 +7,8 @@
 #   script  a bare name.sh|.bash|.py|.mjs: some file in the repo has that name
 #   env     a word with the configured env-prefix: some code file names it
 #   cli     `tool.sh <sub>` in backticks or a code fence, for a script whose
-#           subcommands are enumerable: the script dispatches <sub>
+#           subcommands are enumerable: the script dispatches <sub>;
+#           `tool.sh {a|b}` and `tool.sh <a|b>` claim each alternative
 #   route   GET|POST|PUT|DELETE|PATCH /x/y: the static part appears in code
 # Research docs make path and script claims only. Records dirs make none.
 # Prints `MISSING <kind> <value> <doc>:<line> (+N more)` per claim, and
@@ -83,6 +84,12 @@ dp_claims() {
       # cli claims only from code contexts: a fence, or inline backtick spans.
       if (fence) code = line
       else { code = ""; t = line; while (match(t, /`[^`]+`/)) { code = code "|" substr(t, RSTART + 1, RLENGTH - 2); t = substr(t, RSTART + RLENGTH) } }
+      alt = code
+      while (match(alt, /[A-Za-z0-9_.\/-]*[A-Za-z0-9_-]\.sh +[{<][a-z][a-z0-9_\\-]*([|][a-z][a-z0-9_\\-]*)+[}>]/)) {
+        c = substr(alt, RSTART, RLENGTH); alt = substr(alt, RSTART + RLENGTH)
+        tool = c; sub(/ .*/, "", tool); sub(/.*\//, "", tool); sub(/^[^{<]*[{<]/, "", c); sub(/[}>]$/, "", c); gsub(/\\/, "", c)
+        m = split(c, alts, "|"); for (k = 1; k <= m; k++) print "cli\t" tool " " alts[k] "\t" loc
+      }
       while (match(code, /[A-Za-z0-9_.\/-]*[A-Za-z0-9_-]\.sh +[a-z][a-z0-9_-]*/)) {
         c = substr(code, RSTART, RLENGTH); code = substr(code, RSTART + RLENGTH)
         if (code ~ /^[A-Za-z0-9_.\/-]/) continue

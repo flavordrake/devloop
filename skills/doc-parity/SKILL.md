@@ -31,12 +31,21 @@ Scripts operate on the git toplevel of the current directory:
 
 Options: `--warn|--block` (default block), `--kinds k1,k2`, `--root DIR`, `--config FILE` (alternate config file). `doc-parity.sh --list docs|research|code|user-text` prints the inputs for layer 2.
 
+Without Claude Code (a plain shell, a Codex, opencode or pi session, a cron job), there is no `${CLAUDE_PLUGIN_ROOT}`; resolve devloop with `devloop-path.sh` and run from the repo:
+
+```bash
+"$(devloop-path.sh)/skills/doc-parity/scripts/doc-parity.sh" --block
+DEVLOOP_ROOT=~/workspace/devloop "$DEVLOOP_ROOT/skills/doc-parity/scripts/doc-parity.sh" --block   # a checkout instead of the plugin cache
+```
+
+The scripts need only bash, git, awk and grep. Config is read from the repo's `AGENTS.md` (`## Doc surfaces`), which Codex, opencode and pi load natively, so a non-Claude session finds the same configuration with no extra wiring. Layer 2 below is harness-neutral prose: any agent that can read files follows it.
+
 Docs to code (`MISSING <kind> <value> <doc>:<line> (+N more)`):
 
 - `path`: a repo path under a top-level directory (file with extension, or `dir/`) exists. A path relative to the naming doc's directory also resolves.
 - `script`: a bare `<name>.sh|.bash|.py|.mjs` matches some file name.
 - `env`: a word with the project env prefix appears in code.
-- `cli`: `` `<tool>.sh <sub>` `` (backticks or code fence) is a subcommand the script dispatches.
+- `cli`: `` `<tool>.sh <sub>` `` (backticks or code fence) is a subcommand the script dispatches; `<tool>.sh {a|b}` and `<tool>.sh <a|b>` claim each alternative.
 - `route`: `GET|POST|PUT|DELETE|PATCH /x/y` has its static part in code.
 
 Code to docs (`UNDOCUMENTED <kind> <value> <code>:<line>`):
@@ -44,7 +53,7 @@ Code to docs (`UNDOCUMENTED <kind> <value> <code>:<line>`):
 - `called`: a path the system calls (`.claude/settings.json`, `hooks.json`, `hooks/`, `.claude/hooks/`, `.githooks/`, `.github/workflows/`, `package.json`, `Makefile`, `justfile`, any shell script, or an `ExecStart=` or `curl ... | sh` line in any code file) is named in a doc. `dart tools/x.dart` or `python tools/x.py` in a script makes `tools/x.dart` called.
 - `file`: every file matching the `code` globs is named in a doc.
 - `env`: prefixed words in non-test code, or (no prefix) getenv-style reads: sh `${X:-}` (not self-assigned), `os.environ`, `process.env`, `Platform.environment`/`fromEnvironment`, `System.getenv`, `env::var`, `os.Getenv`, `getenv`. OS, CI and toolchain variables (`HOME`, `PATH`, `CI`, `JAVA_HOME`, `ANDROID_HOME`, `NODE_ENV`, `GITHUB_*`, `CARGO_*`, ...) are never surfaces.
-- `cli`: subcommands found by cheap heuristics: top-level sh `case "$1"|"$cmd"...` arms, argparse `add_parser`, click/commander `command(`, Dart `addCommand`, clikt `name =`.
+- `cli`: subcommands found by cheap heuristics: top-level sh `case "$1"|"$cmd"...` arms (a one-line arm that only forwards `"$@"` to another command, `build) exec flutter "$@" ;;`, is a pass-through and not counted), argparse `add_parser`, click/commander `command(`, Dart `addCommand`, clikt `name =`. A doc's `<tool>.sh {a|b}` or `<tool>.sh <a|b>` documents each alternative.
 
 A file counts as documented by its full path, its file name, or a directory token above it (`scripts/test/`, `tools/`, `docs/specs/` cover everything under them, which keeps waivers small).
 
@@ -121,7 +130,8 @@ Then re-run layer 1: new doc lines are new claims. Repeat until both directions 
 
 ## Gate wiring
 
-- CI (no plugin installed): `uses: flavordrake/devloop/.github/actions/setup@<tag>`, then `"$DEVLOOP_ROOT/skills/doc-parity/scripts/doc-parity.sh" --block`.
+- CI (no plugin installed): `uses: flavordrake/devloop/.github/actions/setup@<full commit sha>` (a tag is a mutable convenience), then `"$DEVLOOP_ROOT/skills/doc-parity/scripts/doc-parity.sh" --block`.
+- No Claude Code (Codex, opencode, pi, a shell): `"$(devloop-path.sh)/skills/doc-parity/scripts/doc-parity.sh" --block`, as above.
 - Fast gate: `doc-parity.sh --warn` (or `--block --kinds path,script,called` once a repo is clean).
 - Ship / release: `doc-parity.sh --block`, then layer 2 before the tag.
 - Repo-specific checks stay in the repo (e.g. a coverage-map check that every spec has a coverage row).

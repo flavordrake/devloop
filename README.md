@@ -73,11 +73,13 @@ Plugins can't ship rules, so repos link them (see below). Every session loads th
 4. In CI (no plugin installed), pin devloop with the setup action, which exports `DEVLOOP_ROOT`:
 
    ```yaml
-   - uses: flavordrake/devloop/.github/actions/setup@v0.4.4
+   - uses: flavordrake/devloop/.github/actions/setup@<full 40-char commit sha>
    - run: '"$DEVLOOP_ROOT/skills/doc-parity/scripts/doc-parity.sh" --block'
    ```
 
-   Then delete the repo's vendored copies of devloop scripts and their tests; devloop tests them.
+   Then, after a parity review, retire the repo's vendored copies of devloop scripts; keep their local tests until devloop's coverage is equivalent.
+
+   **Pinning.** A full commit sha is immutable and the recommended form; a tag (`@v0.4.8`) is a convenience that can be moved. The action downloads nothing beyond devloop itself: with no `ref` input it copies its own checkout, which the runner already fetched for the `uses:` line; with `ref` it does one shallow fetch of that ref from github.com/flavordrake/devloop. devloop has no transitive dependencies beyond bash, git, jq and awk.
 5. Run `/doc-parity` before every release. Release is blocked while code and docs drift.
 
 ## Structure

@@ -9,7 +9,9 @@ devloop follows its own contract (`rules/gates.md`).
 
 ## Gates
 - fast: scripts/fast-gate.sh
+  - class: offline
 - ship: skills/doc-parity/scripts/doc-parity.sh --block
+  - class: offline
 
 ## Doc surfaces
 - code: *.sh
